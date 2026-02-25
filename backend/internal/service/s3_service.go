@@ -1,8 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,6 +17,8 @@ import (
 type S3Service interface {
 	GenerateUploadURL(ctx context.Context, key string, contentType string, size int64) (uploadURL, downloadURL string, err error)
 	GenerateDownloadURL(ctx context.Context, key string) (string, error)
+	UploadObject(ctx context.Context, key string, contentType string, body io.Reader) error
+	GetObject(ctx context.Context, key string) (io.ReadCloser, string, error)
 	DeleteObject(ctx context.Context, key string) error
 	BucketExists(ctx context.Context) (bool, error)
 	CreateBucket(ctx context.Context) error
@@ -58,12 +63,28 @@ func NewS3Service(cfg S3Config) (S3Service, error) {
 		o.UsePathStyle = true
 	})
 
-	return &s3Service{
+	svc := &s3Service{
 		client:        client,
 		presignClient: s3.NewPresignClient(client),
 		bucket:        cfg.Bucket,
 		presignExpiry: 3600 * time.Second,
-	}, nil
+	}
+
+	// Ensure bucket exists (best-effort, non-fatal)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	exists, err := svc.BucketExists(ctx)
+	if err != nil {
+		log.Printf("S3: bucket existence check failed for %s: %v", cfg.Bucket, err)
+	} else if !exists {
+		if err := svc.CreateBucket(ctx); err != nil {
+			log.Printf("S3: failed to create bucket %s: %v", cfg.Bucket, err)
+		} else {
+			log.Printf("S3: bucket %s created", cfg.Bucket)
+		}
+	}
+
+	return svc, nil
 }
 
 func (s *s3Service) GenerateUploadURL(ctx context.Context, key string, contentType string, size int64) (string, string, error) {
@@ -102,6 +123,39 @@ func (s *s3Service) GenerateDownloadURL(ctx context.Context, key string) (string
 		return "", fmt.Errorf("failed to generate presigned download URL: %w", err)
 	}
 	return presignReq.URL, nil
+}
+
+func (s *s3Service) UploadObject(ctx context.Context, key string, contentType string, body io.Reader) error {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return fmt.Errorf("failed to read body: %w", err)
+	}
+
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload object to S3: %w", err)
+	}
+	return nil
+}
+
+func (s *s3Service) GetObject(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get object from S3: %w", err)
+	}
+	contentType := ""
+	if out.ContentType != nil {
+		contentType = *out.ContentType
+	}
+	return out.Body, contentType, nil
 }
 
 func (s *s3Service) DeleteObject(ctx context.Context, key string) error {

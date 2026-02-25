@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"blocknote/internal/entity"
@@ -13,6 +14,8 @@ import (
 type AssetUseCase interface {
 	GetUploadURL(ctx context.Context, userID string, req *entity.GetUploadURLRequest) (*entity.GetUploadURLResponse, error)
 	GetDownloadURL(ctx context.Context, assetID string) (*entity.GetDownloadURLResponse, error)
+	UploadAssetContent(ctx context.Context, assetID string, contentType string, data io.Reader) error
+	GetAssetContent(ctx context.Context, assetID string) (io.ReadCloser, string, error)
 	DeleteAsset(ctx context.Context, assetID string) error
 }
 
@@ -32,11 +35,6 @@ func (u *assetUseCase) GetUploadURL(ctx context.Context, userID string, req *ent
 	assetID := generateUUID()
 	key := fmt.Sprintf("assets/%s/%s/%s", req.WorkspaceID, req.PageID, assetID)
 
-	uploadURL, downloadURL, err := u.s3Service.GenerateUploadURL(ctx, key, req.MimeType, 0)
-	if err != nil {
-		return nil, err
-	}
-
 	asset := &entity.Asset{
 		ID:          assetID,
 		WorkspaceID: req.WorkspaceID,
@@ -50,8 +48,11 @@ func (u *assetUseCase) GetUploadURL(ctx context.Context, userID string, req *ent
 	}
 
 	if err := u.assetRepo.Create(ctx, asset); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create asset in repository: %w", err)
 	}
+
+	uploadURL := fmt.Sprintf("/api/assets/upload/%s", assetID)
+	downloadURL := fmt.Sprintf("/api/assets/file/%s", assetID)
 
 	return &entity.GetUploadURLResponse{
 		UploadURL:   uploadURL,
@@ -67,16 +68,35 @@ func (u *assetUseCase) GetDownloadURL(ctx context.Context, assetID string) (*ent
 	if err != nil {
 		return nil, err
 	}
-
-	downloadURL, err := u.s3Service.GenerateDownloadURL(ctx, asset.S3Key)
-	if err != nil {
-		return nil, err
-	}
+	downloadURL := fmt.Sprintf("/api/assets/file/%s", asset.ID)
 
 	return &entity.GetDownloadURLResponse{
 		DownloadURL: downloadURL,
 		ExpiresIn:   3600,
 	}, nil
+}
+
+func (u *assetUseCase) UploadAssetContent(ctx context.Context, assetID string, contentType string, data io.Reader) error {
+	asset, err := u.assetRepo.GetByID(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	if err := u.s3Service.UploadObject(ctx, asset.S3Key, contentType, data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *assetUseCase) GetAssetContent(ctx context.Context, assetID string) (io.ReadCloser, string, error) {
+	asset, err := u.assetRepo.GetByID(ctx, assetID)
+	if err != nil {
+		return nil, "", err
+	}
+	body, contentType, err := u.s3Service.GetObject(ctx, asset.S3Key)
+	if err != nil {
+		return nil, "", err
+	}
+	return body, contentType, nil
 }
 
 func (u *assetUseCase) DeleteAsset(ctx context.Context, assetID string) error {

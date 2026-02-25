@@ -11,9 +11,10 @@ interface ImageBlockProps {
   block: Block;
   onUpdate: (content: string) => void;
   workspaceId?: string;
+  pageId: string;
 }
 
-export function ImageBlock({ block, onUpdate, workspaceId }: ImageBlockProps) {
+export function ImageBlock({ block, onUpdate, workspaceId, pageId }: ImageBlockProps) {
   const { upload, uploading } = useS3Upload();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -26,7 +27,7 @@ export function ImageBlock({ block, onUpdate, workspaceId }: ImageBlockProps) {
     const file = e.target.files?.[0];
     if (!file || !workspaceId) return;
 
-    const result = await upload(file, block.id, workspaceId);
+    const result = await upload(file, pageId, workspaceId);
     if (result) {
       onUpdate(result.url);
     }
@@ -39,7 +40,7 @@ export function ImageBlock({ block, onUpdate, workspaceId }: ImageBlockProps) {
     const file = e.dataTransfer.files[0];
     if (!file || !file.type.startsWith('image/') || !workspaceId) return;
 
-    const result = await upload(file, block.id, workspaceId);
+    const result = await upload(file, pageId, workspaceId);
     if (result) {
       onUpdate(result.url);
     }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -35,6 +36,7 @@ func (h *WorkspaceHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	workspace, err := h.workspaceUseCase.Create(r.Context(), userID, &req)
 	if err != nil {
+		log.Printf("workspace create error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -52,6 +54,7 @@ func (h *WorkspaceHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workspaces, err := h.workspaceUseCase.GetByUserID(r.Context(), userID)
 	if err != nil {
+		log.Printf("workspace list error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

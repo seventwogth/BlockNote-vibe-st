@@ -655,7 +655,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
               <ImageBlock
                 block={block}
                 onUpdate={(content) => handleBlockContentChange(block.id, content)}
-                workspaceId={page?.workspace_id}
+                workspaceId={page.workspace_id}
+                pageId={page.id}
               />
             ) : (
               <>

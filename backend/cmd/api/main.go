@@ -44,6 +44,8 @@ func main() {
 	s3Service, err := service.NewS3Service(s3Config)
 	if err != nil {
 		log.Printf("Warning: Failed to initialize S3 service: %v", err)
+	} else {
+		log.Printf("S3 service initialized successfully")
 	}
 
 	authUseCase := usecase.NewAuthUseCase(userRepo, jwtService)
@@ -151,6 +153,14 @@ func main() {
 
 	mux.HandleFunc("/api/assets/upload-url", func(w http.ResponseWriter, r *http.Request) {
 		authMiddleware.Handler(http.HandlerFunc(assetHandler.GetUploadURL)).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/assets/upload/", func(w http.ResponseWriter, r *http.Request) {
+		authMiddleware.Handler(http.HandlerFunc(assetHandler.UploadFile)).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/assets/file/", func(w http.ResponseWriter, r *http.Request) {
+		assetHandler.ServeFile(w, r)
 	})
 
 	mux.HandleFunc("/api/assets/", func(w http.ResponseWriter, r *http.Request) {
