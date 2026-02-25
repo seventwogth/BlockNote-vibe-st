@@ -17,8 +17,8 @@ export function SettingsModal({ workspace, onClose, onUpdate }: SettingsModalPro
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.updatePage(workspace.id, { title: name, icon });
-      onUpdate({ ...workspace, name, icon: icon || undefined });
+      const updated = await api.updateWorkspace(workspace.id, { name, icon });
+      onUpdate(updated);
       onClose();
     } catch (err) {
       console.error('Failed to save settings:', err);

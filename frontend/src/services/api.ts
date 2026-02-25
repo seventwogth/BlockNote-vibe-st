@@ -97,6 +97,13 @@ class ApiService {
     });
   }
 
+  async updateWorkspace(workspaceId: string, data: { name?: string; icon?: string }): Promise<Workspace> {
+    return this.request<Workspace>(`/workspaces/${workspaceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getWorkspacePages(workspaceId: string): Promise<Page[]> {
     return this.request<Page[]>(`/workspaces/${workspaceId}/pages`);
   }
@@ -143,7 +150,13 @@ class ApiService {
   }
 
   async updatePageContent(pageId: string, content: Uint8Array): Promise<void> {
-    const base64 = btoa(String.fromCharCode(...content));
+    let binary = '';
+    const bytes = new Uint8Array(content);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
     return this.request<void>(`/pages/${pageId}/update`, {
       method: 'POST',
       body: JSON.stringify({ content: base64 }),

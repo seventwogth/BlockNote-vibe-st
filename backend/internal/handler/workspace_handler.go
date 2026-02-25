@@ -199,3 +199,53 @@ func (h *WorkspaceHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+
+func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	workspaceID := strings.TrimPrefix(r.URL.Path, "/api/workspaces/")
+	if workspaceID == "" {
+		http.Error(w, "Workspace ID required", http.StatusBadRequest)
+		return
+	}
+
+	workspace, err := h.workspaceUseCase.GetByID(r.Context(), workspaceID)
+	if err != nil {
+		http.Error(w, "Workspace not found", http.StatusNotFound)
+		return
+	}
+
+	isMember, _, err := h.workspaceUseCase.IsMember(r.Context(), workspaceID, userID)
+	if err != nil || !isMember {
+		http.Error(w, "Not authorized", http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		Icon string `json:"icon"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name != "" {
+		workspace.Name = req.Name
+	}
+	if req.Icon != "" {
+		workspace.Icon = req.Icon
+	}
+
+	if err := h.workspaceUseCase.Update(r.Context(), workspace); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(workspace)
+}

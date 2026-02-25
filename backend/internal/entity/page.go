@@ -27,7 +27,7 @@ type PageContent struct {
 
 type PageWithContent struct {
 	Page
-	Content []byte `json:"content"`
+	Content string `json:"content"`
 }
 
 type CreatePageRequest struct {

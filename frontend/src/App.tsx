@@ -3,6 +3,8 @@ import { Layout } from './components/Layout/Layout';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { BlockEditor } from './components/Editor/BlockEditor';
 import { BoardEditor } from './components/Editor/BoardEditor';
+import { ToastContainer } from './components/Toast';
+import { ToastProvider } from './hooks/useToast';
 import { usePage } from './hooks/usePage';
 import { api } from './services/api';
 import { User } from './types';
@@ -58,39 +60,47 @@ function App() {
   }, [updatePage]);
 
   if (!token) {
-    return <AuthScreen onLogin={handleLogin} />;
+    return (
+      <ToastProvider>
+        <AuthScreen onLogin={handleLogin} />
+        <ToastContainer />
+      </ToastProvider>
+    );
   }
 
   return (
-    <Layout
-      sidebar={
-        <Sidebar
-          selectedPageId={selectedPageId || undefined}
-          onSelectPage={handleSelectPage}
-          token={token}
-        />
-      }
-      user={user ? { name: user.name, email: user.email } : undefined}
-      onLogout={handleLogout}
-    >
-      {loading ? (
-        <div className="flex items-center justify-center h-full">
-          <span className="text-text-secondary">Loading...</span>
-        </div>
-      ) : page?.page_type === 'board' ? (
-        <BoardEditor
-          page={page}
-          onSaveContent={handleSaveContent}
-          onUpdatePage={handleUpdatePage}
-        />
-      ) : (
-        <BlockEditor
-          page={page}
-          onSaveContent={handleSaveContent}
-          onUpdatePage={handleUpdatePage}
-        />
-      )}
-    </Layout>
+    <ToastProvider>
+      <Layout
+        sidebar={
+          <Sidebar
+            selectedPageId={selectedPageId || undefined}
+            onSelectPage={handleSelectPage}
+            token={token}
+          />
+        }
+        user={user ? { name: user.name, email: user.email } : undefined}
+        onLogout={handleLogout}
+      >
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <span className="text-text-secondary">Loading...</span>
+          </div>
+        ) : page?.page_type === 'board' ? (
+          <BoardEditor
+            page={page}
+            onSaveContent={handleSaveContent}
+            onUpdatePage={handleUpdatePage}
+          />
+        ) : (
+          <BlockEditor
+            page={page}
+            onSaveContent={handleSaveContent}
+            onUpdatePage={handleUpdatePage}
+          />
+        )}
+      </Layout>
+      <ToastContainer />
+    </ToastProvider>
   );
 }
 

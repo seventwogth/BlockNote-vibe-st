@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"time"
 
@@ -76,9 +77,14 @@ func (u *pageUseCase) GetByID(ctx context.Context, id string) (*entity.PageWithC
 		return nil, err
 	}
 
+	var contentStr string
+	if len(content.Content) > 0 {
+		contentStr = base64.StdEncoding.EncodeToString(content.Content)
+	}
+
 	return &entity.PageWithContent{
 		Page:    *page,
-		Content: content.Content,
+		Content: contentStr,
 	}, nil
 }
 

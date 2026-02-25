@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 
@@ -135,13 +135,21 @@ func (h *PageHandler) UpdateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.pageUseCase.UpdateContent(r.Context(), id, body); err != nil {
+	decoded, err := base64.StdEncoding.DecodeString(req.Content)
+	if err != nil {
+		http.Error(w, "Invalid base64 content", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.pageUseCase.UpdateContent(r.Context(), id, decoded); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

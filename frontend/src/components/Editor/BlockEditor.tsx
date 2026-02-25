@@ -27,7 +27,6 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
   const ydocRef = useRef<Y.Doc | null>(null);
   const [title, setTitle] = useState('');
   const [blocks, setBlocks] = useState<Block[]>([{ id: '1', type: 'text', content: '' }]);
-  const [saving, setSaving] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; blockId: string } | null>(null);
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null);
@@ -95,6 +94,32 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
       ydocRef.current?.off('update', handleUpdate);
     };
   }, [sendUpdate]);
+
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+
+  useEffect(() => {
+    if (!ydocRef.current || !page) return;
+    
+    const currentContent = blocksToContent(blocks);
+    if (currentContent === lastSavedContentRef.current) return;
+    
+    setSaveStatus('unsaved');
+    
+    const timeoutId = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        const update = Y.encodeStateAsUpdate(ydocRef.current!);
+        await onSaveContent(update);
+        lastSavedContentRef.current = currentContent;
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+        setSaveStatus('unsaved');
+      }
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [blocks, page, onSaveContent]);
 
   const parseContentToBlocks = (content: string): Block[] => {
     if (!content) return [];
@@ -311,8 +336,22 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
 
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
-    if (selection && selection.toString().length > 0) {
+    if (!selection || selection.rangeCount === 0) {
+      setFloatingToolbar(null);
+      return;
+    }
+    
+    const selectedText = selection.toString();
+    if (selectedText && selectedText.length > 0) {
+      const editorEl = editorRef.current;
+      if (!editorEl) return;
+      
       const range = selection.getRangeAt(0);
+      if (!editorEl.contains(range.commonAncestorContainer)) {
+        setFloatingToolbar(null);
+        return;
+      }
+      
       const rect = range.getBoundingClientRect();
       setFloatingToolbar({ x: rect.left + rect.width / 2, y: rect.top - 10 });
     } else {
@@ -446,12 +485,15 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
 
   const handleSave = async () => {
     if (!ydocRef.current) return;
-    setSaving(true);
+    setSaveStatus('saving');
     try {
       const update = Y.encodeStateAsUpdate(ydocRef.current);
       await onSaveContent(update);
-    } finally {
-      setSaving(false);
+      lastSavedContentRef.current = blocksToContent(blocks);
+      setSaveStatus('saved');
+    } catch (err) {
+      console.error('Save failed:', err);
+      setSaveStatus('unsaved');
     }
   };
 
@@ -505,7 +547,15 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
             📄 Text
           </span>
           
-          {saving && <span> - Saving...</span>}
+          <span className={`text-xs ${
+            saveStatus === 'saved' ? 'text-green-600' : 
+            saveStatus === 'saving' ? 'text-yellow-600' : 
+            'text-orange-600'
+          }`}>
+            {saveStatus === 'saved' ? '✓ Saved' : 
+             saveStatus === 'saving' ? '⟳ Saving...' : 
+             '● Unsaved'}
+          </span>
           {uploading && <span> - Uploading...</span>}
           <button 
             onClick={handleSave}
@@ -542,7 +592,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
                 block.type === 'quote' ? 'border-l-4 border-gray-300 pl-4 italic text-gray-600' :
                 block.type === 'code' ? 'font-mono bg-gray-100 p-2 rounded text-sm' :
                 block.type === 'divider' ? 'border-t border-gray-200 my-4' :
-                block.type === 'callout' ? 'bg-yellow-50 p-4 rounded-lg border border-yellow-200' :
+                block.type === 'callout' ? 'bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex items-start gap-3' :
                 ''
               }`}
               onInput={(e) => {

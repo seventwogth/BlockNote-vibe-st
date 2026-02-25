@@ -111,7 +111,14 @@ func main() {
 			return
 		}
 
-		authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Get)).ServeHTTP(w, r)
+		switch r.Method {
+		case http.MethodGet:
+			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Get)).ServeHTTP(w, r)
+		case http.MethodPut:
+			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Update)).ServeHTTP(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	mux.HandleFunc("/api/pages", func(w http.ResponseWriter, r *http.Request) {

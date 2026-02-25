@@ -21,6 +21,11 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [createPageParentId, setCreatePageParentId] = useState<string | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredPages = pages.filter(page => 
+    page.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   useEffect(() => {
     if (token) {
@@ -151,7 +156,17 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4">
-        <div className="flex items-center justify-between mb-2 mt-2">
+        <div className="mb-2">
+          <input
+            type="text"
+            placeholder="Search pages..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-2 py-1 text-sm border border-border rounded bg-white focus:outline-none focus:border-primary"
+          />
+        </div>
+        
+        <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-text-secondary uppercase">
             Pages
           </span>
@@ -180,7 +195,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
         </div>
         
         <PageTree
-          pages={pages}
+          pages={filteredPages}
           selectedPageId={selectedPageId}
           onSelectPage={onSelectPage}
           onCreatePage={handleCreatePageClick}
