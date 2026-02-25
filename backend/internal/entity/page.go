@@ -11,6 +11,7 @@ type Page struct {
 	OwnerID     string    `json:"owner_id"`
 	Title       string    `json:"title"`
 	Icon        *string   `json:"icon,omitempty"`
+	PageType    string    `json:"page_type"`
 	IsArchived  bool      `json:"is_archived"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -34,6 +35,7 @@ type CreatePageRequest struct {
 	ParentID    *string `json:"parent_id,omitempty"`
 	Title       string  `json:"title"`
 	Icon        *string `json:"icon,omitempty"`
+	PageType    string  `json:"page_type"`
 }
 
 type UpdatePageRequest struct {
@@ -46,3 +48,8 @@ type UpdateContentRequest struct {
 	Content []byte `json:"content"`
 	Version int    `json:"version"`
 }
+
+const (
+	PageTypeText  = "text"
+	PageTypeBoard = "board"
+)

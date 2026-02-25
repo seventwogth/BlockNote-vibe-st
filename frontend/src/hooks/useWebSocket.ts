@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import * as Y from 'yjs';
 import { api } from '../services/api';
 
+const API_URL = '/api';
+
 export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -12,7 +14,7 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
 
     const token = api.getToken();
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/ws/pages/${pageId}${token ? `?token=${token}` : ''}`;
+    const wsUrl = `${protocol}//${window.location.host}${API_URL}/ws/pages/${pageId}${token ? `?token=${token}` : ''}`;
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
@@ -29,7 +31,7 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
       try {
         Y.applyUpdate(ydoc, data);
       } catch (err) {
-        console.error('Failed to apply Yjs update:', err);
+        console.warn('Failed to apply Yjs update:', err);
       }
     };
 
@@ -37,9 +39,8 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
       setConnected(false);
     };
 
-    ws.onerror = (event) => {
+    ws.onerror = () => {
       setError('WebSocket connection error');
-      console.error('WebSocket error:', event);
     };
 
     wsRef.current = ws;

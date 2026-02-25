@@ -40,6 +40,11 @@ func (u *pageUseCase) Create(ctx context.Context, userID string, req *entity.Cre
 		title = "Untitled"
 	}
 
+	pageType := req.PageType
+	if pageType == "" {
+		pageType = "text"
+	}
+
 	page := &entity.Page{
 		ID:          generateUUID(),
 		WorkspaceID: req.WorkspaceID,
@@ -47,6 +52,7 @@ func (u *pageUseCase) Create(ctx context.Context, userID string, req *entity.Cre
 		OwnerID:     userID,
 		Title:       title,
 		Icon:        req.Icon,
+		PageType:    pageType,
 		IsArchived:  false,
 		CreatedAt:   now,
 		UpdatedAt:   now,

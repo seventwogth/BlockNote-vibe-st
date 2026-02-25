@@ -3,6 +3,8 @@ import {
   RegisterRequest,
   LoginRequest,
   Workspace,
+  WorkspaceWithMembers,
+  WorkspaceMember,
   CreateWorkspaceRequest,
   Page,
   PageWithContent,
@@ -149,6 +151,30 @@ class ApiService {
 
   async getDownloadURL(assetId: string): Promise<GetDownloadURLResponse> {
     return this.request<GetDownloadURLResponse>(`/assets/${assetId}/download-url`);
+  }
+
+  async getWorkspaceWithMembers(workspaceId: string): Promise<WorkspaceWithMembers> {
+    return this.request<WorkspaceWithMembers>(`/workspaces/${workspaceId}/members`);
+  }
+
+  async inviteUser(workspaceId: string, email: string, role: string): Promise<WorkspaceMember> {
+    return this.request<WorkspaceMember>(`/workspaces/${workspaceId}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    });
+  }
+
+  async removeMember(workspaceId: string, memberId: string): Promise<void> {
+    return this.request<void>(`/workspaces/${workspaceId}/members/${memberId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateMemberRole(workspaceId: string, memberId: string, role: string): Promise<void> {
+    return this.request<void>(`/workspaces/${workspaceId}/members/${memberId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    });
   }
 }
 

@@ -106,8 +106,10 @@ func (r *workspaceRepository) AddMember(ctx context.Context, member *entity.Work
 
 func (r *workspaceRepository) GetMembers(ctx context.Context, workspaceID string) ([]entity.WorkspaceMember, error) {
 	query := `
-		SELECT workspace_id, user_id, role, created_at
-		FROM workspace_members WHERE workspace_id = $1
+		SELECT wm.workspace_id, wm.user_id, wm.role, wm.created_at, u.id, u.email, u.name, u.avatar_url
+		FROM workspace_members wm
+		LEFT JOIN users u ON wm.user_id = u.id
+		WHERE wm.workspace_id = $1
 	`
 	rows, err := r.db.QueryContext(ctx, query, workspaceID)
 	if err != nil {
@@ -118,8 +120,17 @@ func (r *workspaceRepository) GetMembers(ctx context.Context, workspaceID string
 	var members []entity.WorkspaceMember
 	for rows.Next() {
 		var m entity.WorkspaceMember
-		if err := rows.Scan(&m.WorkspaceID, &m.UserID, &m.Role, &m.CreatedAt); err != nil {
+		var userID, email, name, avatarURL *string
+		if err := rows.Scan(&m.WorkspaceID, &m.UserID, &m.Role, &m.CreatedAt, &userID, &email, &name, &avatarURL); err != nil {
 			return nil, err
+		}
+		if userID != nil {
+			m.User = &entity.User{
+				ID:        *userID,
+				Email:     *email,
+				Name:      *name,
+				AvatarURL: *avatarURL,
+			}
 		}
 		members = append(members, m)
 	}

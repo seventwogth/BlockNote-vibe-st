@@ -47,7 +47,7 @@ func main() {
 	}
 
 	authUseCase := usecase.NewAuthUseCase(userRepo, jwtService)
-	workspaceUseCase := usecase.NewWorkspaceUseCase(workspaceRepo)
+	workspaceUseCase := usecase.NewWorkspaceUseCase(workspaceRepo, userRepo)
 	pageUseCase := usecase.NewPageUseCase(pageRepo)
 	assetUseCase := usecase.NewAssetUseCase(assetRepo, s3Service)
 
@@ -83,12 +83,34 @@ func main() {
 	})
 
 	mux.HandleFunc("/api/workspaces/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/pages") {
-			workspaceID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/workspaces/"), "/pages")
+		path := r.URL.Path
+
+		if strings.HasSuffix(path, "/pages") {
+			workspaceID := strings.TrimSuffix(strings.TrimPrefix(path, "/api/workspaces/"), "/pages")
 			r.URL.Path = "/api/workspaces/" + workspaceID + "/pages"
 			pageHandler.ListByWorkspace(w, r)
 			return
 		}
+
+		if strings.HasSuffix(path, "/members") {
+			workspaceID := strings.TrimSuffix(strings.TrimPrefix(path, "/api/workspaces/"), "/members")
+			r.URL.Path = "/api/workspaces/" + workspaceID + "/members"
+			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.GetWithMembers)).ServeHTTP(w, r)
+			return
+		}
+
+		if strings.HasSuffix(path, "/invite") {
+			workspaceID := strings.TrimSuffix(strings.TrimPrefix(path, "/api/workspaces/"), "/invite")
+			r.URL.Path = "/api/workspaces/" + workspaceID + "/invite"
+			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Invite)).ServeHTTP(w, r)
+			return
+		}
+
+		if strings.Contains(path, "/members/") {
+			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.RemoveMember)).ServeHTTP(w, r)
+			return
+		}
+
 		authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Get)).ServeHTTP(w, r)
 	})
 

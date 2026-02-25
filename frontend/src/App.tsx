@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Layout } from './components/Layout/Layout';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { BlockEditor } from './components/Editor/BlockEditor';
+import { BoardEditor } from './components/Editor/BoardEditor';
 import { usePage } from './hooks/usePage';
 import { api } from './services/api';
 import { User } from './types';
@@ -76,6 +77,12 @@ function App() {
         <div className="flex items-center justify-center h-full">
           <span className="text-text-secondary">Loading...</span>
         </div>
+      ) : page?.page_type === 'board' ? (
+        <BoardEditor
+          page={page}
+          onSaveContent={handleSaveContent}
+          onUpdatePage={handleUpdatePage}
+        />
       ) : (
         <BlockEditor
           page={page}

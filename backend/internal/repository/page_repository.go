@@ -27,12 +27,17 @@ func NewPageRepository(db *sql.DB) PageRepository {
 }
 
 func (r *pageRepository) Create(ctx context.Context, page *entity.Page) error {
+	pageType := page.PageType
+	if pageType == "" {
+		pageType = "text"
+	}
+
 	query := `
-		INSERT INTO pages (id, workspace_id, parent_id, owner_id, title, icon, is_archived, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO pages (id, workspace_id, parent_id, owner_id, title, icon, page_type, is_archived, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 	_, err := r.db.ExecContext(ctx, query,
-		page.ID, page.WorkspaceID, page.ParentID, page.OwnerID, page.Title, page.Icon, page.IsArchived, page.CreatedAt, page.UpdatedAt,
+		page.ID, page.WorkspaceID, page.ParentID, page.OwnerID, page.Title, page.Icon, pageType, page.IsArchived, page.CreatedAt, page.UpdatedAt,
 	)
 	if err != nil {
 		return err
@@ -48,13 +53,13 @@ func (r *pageRepository) Create(ctx context.Context, page *entity.Page) error {
 
 func (r *pageRepository) GetByID(ctx context.Context, id string) (*entity.Page, error) {
 	query := `
-		SELECT id, workspace_id, parent_id, owner_id, title, icon, is_archived, created_at, updated_at
+		SELECT id, workspace_id, parent_id, owner_id, title, icon, page_type, is_archived, created_at, updated_at
 		FROM pages WHERE id = $1
 	`
 	page := &entity.Page{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&page.ID, &page.WorkspaceID, &page.ParentID, &page.OwnerID,
-		&page.Title, &page.Icon, &page.IsArchived, &page.CreatedAt, &page.UpdatedAt,
+		&page.Title, &page.Icon, &page.PageType, &page.IsArchived, &page.CreatedAt, &page.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -64,7 +69,7 @@ func (r *pageRepository) GetByID(ctx context.Context, id string) (*entity.Page, 
 
 func (r *pageRepository) GetByWorkspaceID(ctx context.Context, workspaceID string) ([]entity.Page, error) {
 	query := `
-		SELECT id, workspace_id, parent_id, owner_id, title, icon, is_archived, created_at, updated_at
+		SELECT id, workspace_id, parent_id, owner_id, title, icon, page_type, is_archived, created_at, updated_at
 		FROM pages WHERE workspace_id = $1 AND is_archived = FALSE
 		ORDER BY created_at ASC
 	`
@@ -77,7 +82,7 @@ func (r *pageRepository) GetByWorkspaceID(ctx context.Context, workspaceID strin
 	var pages []entity.Page
 	for rows.Next() {
 		var p entity.Page
-		if err := rows.Scan(&p.ID, &p.WorkspaceID, &p.ParentID, &p.OwnerID, &p.Title, &p.Icon, &p.IsArchived, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.WorkspaceID, &p.ParentID, &p.OwnerID, &p.Title, &p.Icon, &p.PageType, &p.IsArchived, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		pages = append(pages, p)

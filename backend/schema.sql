@@ -47,6 +47,7 @@ CREATE TABLE pages (
     owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(500) DEFAULT 'Untitled',
     icon VARCHAR(10),
+    page_type VARCHAR(20) DEFAULT 'text' NOT NULL,
     is_archived BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -56,6 +57,7 @@ CREATE TABLE pages (
 CREATE INDEX idx_pages_workspace ON pages(workspace_id);
 CREATE INDEX idx_pages_parent ON pages(parent_id);
 CREATE INDEX idx_pages_owner ON pages(owner_id);
+CREATE INDEX idx_pages_type ON pages(page_type);
 
 -- Page contents (Yjs binary data)
 CREATE TABLE page_contents (

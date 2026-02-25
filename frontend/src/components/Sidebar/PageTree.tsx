@@ -39,10 +39,15 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, level 
   const hasChildren = page.children && page.children.length > 0;
   const isSelected = selectedPageId === page.id;
 
+  const getPageIcon = (pageType?: string) => {
+    if (pageType === 'board') return '🎨';
+    return page.icon || '📄';
+  };
+
   return (
     <div>
       <div
-        className={`flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-hover rounded-sm ${
+        className={`flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-hover rounded-sm group ${
           isSelected ? 'bg-hover' : ''
         }`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
@@ -61,7 +66,7 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, level 
         )}
         {!hasChildren && <div className="w-4" />}
         
-        <span className="text-sm truncate">{page.icon || '📄'}</span>
+        <span className="text-sm truncate">{getPageIcon(page.page_type)}</span>
         <span className="text-sm text-text-primary truncate">{page.title}</span>
         
         <button

@@ -10,9 +10,22 @@ export interface User {
 export interface Workspace {
   id: string;
   name: string;
+  icon?: string;
   owner_id: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkspaceMember {
+  workspace_id: string;
+  user_id: string;
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  created_at: string;
+  user?: User;
+}
+
+export interface WorkspaceWithMembers extends Workspace {
+  members: WorkspaceMember[];
 }
 
 export interface Page {
@@ -22,6 +35,7 @@ export interface Page {
   owner_id: string;
   title: string;
   icon?: string;
+  page_type: 'text' | 'board';
   is_archived: boolean;
   created_at: string;
   updated_at: string;
@@ -57,6 +71,7 @@ export interface CreatePageRequest {
   parent_id?: string;
   title?: string;
   icon?: string;
+  page_type: 'text' | 'board';
 }
 
 export interface UpdatePageRequest {

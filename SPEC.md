@@ -1,11 +1,14 @@
-# Notion Clone - Block-Based Note-Taking Platform
+# BlockNote - Block-Based Note-Taking Platform
 
 ## 1. Project Overview
 
 **Project Name:** BlockNote  
 **Project Type:** Full-Stack Web Application  
-**Core Functionality:** A block-based note-taking application with real-time collaboration, supporting nested pages, rich media, and CRDT-based synchronization.  
-**Target Users:** Teams and individuals needing collaborative documentation.
+**Core Functionality:** A block-based note-taking application with real-time collaboration, supporting both:
+- **Text Mode** - Notion-like document editing with blocks
+- **Board Mode** - FigJam/Miro-like whiteboard with shapes, drawings, and connectors
+
+**Target Users:** Teams and individuals needing collaborative documentation and brainstorming.
 
 ---
 
@@ -16,7 +19,7 @@
 | Layer | Technology |
 |-------|------------|
 | Frontend | React 18+ (TypeScript), Vite, Tailwind CSS |
-| Editor Engine | BlockSuite SDK (MIT License) |
+| Editor Engine | Custom Block-based Editor with Yjs |
 | Backend | Go 1.22+ (Clean Architecture) |
 | Database | PostgreSQL (Primary) |
 | Cache/Pub-Sub | Redis |
@@ -35,54 +38,45 @@ Clean Architecture with dependency injection:
 
 ---
 
-## 3. UI/UX Specification
+## 3. Page Types
 
-### Layout Structure
+### Page Type: "text"
+- Notion-like document editing
+- Block-based structure with proper cursor handling
+- Supports: text, headings (H1/H2/H3), lists (bullet, numbered), todos, quotes, code, dividers, callouts
+- Slash commands (/) for quick block insertion - see SlashCommandMenu.tsx
+- Right-click context menu - see ContextMenu.tsx with options:
+  - Delete, Duplicate
+  - Turn into (change block type)
+  - Copy/Paste
+  - Color
+- Floating toolbar on text selection (bold, italic, underline, strike, code, link)
+- Keyboard navigation between blocks (Enter, Backspace, Arrow keys)
+- Y.js based real-time collaboration
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Header (56px)                                              │
-├──────────────┬──────────────────────────────────────────────┤
-│              │                                              │
-│   Sidebar    │           Main Content Area                 │
-│   (240px)    │           (Editor + Blocks)                 │
-│              │                                              │
-│  - Workspaces│                                              │
-│  - Pages     │                                              │
-│  - Nested    │                                              │
-│              │                                              │
-└──────────────┴──────────────────────────────────────────────┘
-```
-
-### Visual Design
-
-**Color Palette:**
-- Background: `#FFFFFF` (light), `#1A1A1A` (dark)
-- Surface: `#F7F7F5` (light), `#2F2F2F` (dark)
-- Primary: `#EB5757`
-- Text Primary: `#37352F`
-- Text Secondary: `#9B9A97`
-- Border: `#E9E9E7`
-- Hover: `#F1F1EE`
-
-**Typography:**
-- Font Family: `"Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif`
-- Heading 1: 30px, 600 weight
-- Heading 2: 24px, 600 weight
-- Body: 16px, 400 weight
-- Caption: 14px, 400 weight
-
-**Spacing System:**
-- Base unit: 4px
-- xs: 4px, sm: 8px, md: 16px, lg: 24px, xl: 32px
-
-### Components
-
-1. **Sidebar** - Collapsible, shows workspace tree with nested pages
-2. **Page Title** - Editable with emoji picker
-3. **Block Editor** - BlockSuite-based block editor
-4. **Block Menu** - Drag handle, add block button
-5. **Image Block** - Inline image with upload handling
+### Page Type: "board"
+- FigJam/Miro-like whiteboard
+- Infinite canvas with zoom/pan (mouse wheel, pinch)
+- Bottom toolbar with tool buttons:
+  - Select (V) - select and move elements
+  - Hand (H) - pan canvas
+  - Rectangle (R) - draw rectangles
+  - Ellipse (O) - draw ellipses
+  - Diamond (D) - draw diamonds
+  - Arrow (A) - draw arrows/connectors
+  - Text (T) - add text
+  - Sticky Note (S) - add sticky notes
+  - Pencil (P) - freehand drawing
+  - Eraser (E) - delete elements
+- Color picker (5 colors)
+- Zoom controls in header
+- Right-click context menu:
+  - Copy, Paste, Delete
+  - Bring to front / Send to back
+- Keyboard shortcuts for tools
+- Multi-select with Shift+click
+- Delete with Delete/Backspace key
+- Y.js based real-time collaboration
 
 ---
 
@@ -91,7 +85,7 @@ Clean Architecture with dependency injection:
 ```sql
 -- Users table
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255),
@@ -102,8 +96,9 @@ CREATE TABLE users (
 
 -- Workspaces table (multi-tenant)
 CREATE TABLE workspaces (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
+    icon VARCHAR(10),
     owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -114,18 +109,20 @@ CREATE TABLE workspace_members (
     workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(50) DEFAULT 'member',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (workspace_id, user_id)
 );
 
--- Pages table
+-- Pages table - includes page_type (text/board)
 CREATE TABLE pages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     parent_id UUID REFERENCES pages(id) ON DELETE CASCADE,
     owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(500) DEFAULT 'Untitled',
     icon VARCHAR(10),
-    isarchived BOOLEAN DEFAULT FALSE,
+    page_type VARCHAR(20) DEFAULT 'text' NOT NULL,
+    is_archived BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -140,21 +137,16 @@ CREATE TABLE page_contents (
 
 -- Assets table (S3 metadata)
 CREATE TABLE assets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     filename VARCHAR(255) NOT NULL,
     s3_key VARCHAR(500) NOT NULL,
     mime_type VARCHAR(100) NOT NULL,
     size INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Indexes
-CREATE INDEX idx_pages_workspace ON pages(workspace_id);
-CREATE INDEX idx_pages_parent ON pages(parent_id);
-CREATE INDEX idx_assets_page ON assets(page_id);
-CREATE INDEX idx_assets_workspace ON assets(workspace_id);
 ```
 
 ---
@@ -171,7 +163,7 @@ CREATE INDEX idx_assets_workspace ON assets(workspace_id);
 | POST | /api/workspaces | Create workspace |
 | GET | /api/workspaces/:id/pages | Get workspace pages |
 | GET | /api/pages/:id | Get page with content |
-| POST | /api/pages | Create new page |
+| POST | /api/pages | Create new page (accepts page_type) |
 | PUT | /api/pages/:id | Update page metadata |
 | DELETE | /api/pages/:id | Delete page |
 | POST | /api/pages/:id/update | Update Yjs content |
@@ -184,189 +176,97 @@ CREATE INDEX idx_assets_workspace ON assets(workspace_id);
 |------|-------------|
 | WS /api/ws/pages/:id | Real-time Yjs sync for page |
 
-### Request/Response Types
+---
 
-```typescript
-interface Page {
-  id: string;
-  workspaceId: string;
-  parentId: string | null;
-  ownerId: string;
-  title: string;
-  icon: string | null;
-  isArchived: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+## 6. Frontend Components
 
-interface PageWithContent extends Page {
-  content: Uint8Array;
-}
+### File Structure
 
-interface PresignedUrlResponse {
-  uploadUrl: string;
-  downloadUrl: string;
-  key: string;
-  expiresIn: number;
-}
 ```
+frontend/src/
+├── components/
+│   ├── Editor/
+│   │   ├── BlockEditor.tsx      # Notion-like text editor
+│   │   ├── BoardEditor.tsx     # FigJam-like board editor
+│   │   ├── ContextMenu.tsx     # Right-click context menu
+│   │   ├── SlashCommandMenu.tsx # Slash commands menu
+│   │   └── FloatingToolbar.tsx # Text formatting toolbar
+│   ├── Sidebar/
+│   │   ├── Sidebar.tsx         # Main sidebar component
+│   │   ├── PageTree.tsx       # Page tree navigation
+│   │   └── CreatePageModal.tsx # Create page dialog
+│   ├── Layout/
+│   │   ├── Layout.tsx
+│   │   └── Header.tsx
+│   ├── SettingsModal.tsx
+│   └── ShareModal.tsx
+├── hooks/
+│   ├── usePage.ts              # Page data management
+│   ├── useWebSocket.ts         # Real-time sync
+│   └── useS3Upload.ts          # File uploads
+├── services/
+│   └── api.ts                  # API client
+├── types/
+│   └── index.ts                # TypeScript types
+└── App.tsx                     # Main app component
+```
+
+### Text Editor Features (BlockEditor.tsx)
+- Block-based editing with proper cursor positioning
+- Block types: text, heading1, heading2, heading3, bullet, numbered, todo, quote, code, divider, callout
+- Keyboard navigation (Enter for new block, Backspace to delete empty, Arrow keys)
+- Slash commands (/) to insert different block types
+- Right-click context menu for block operations
+- Floating toolbar for text formatting (bold, italic, underline, strike, code, link)
+- Real-time collaboration via Y.js
+- Auto-save with manual save button
+
+### Board Editor Features (BoardEditor.tsx)
+- Canvas-based rendering with HTML5 Canvas
+- Tools: select, hand, rectangle, ellipse, diamond, arrow, text, sticky, pencil, eraser
+- Color selection (5 preset colors)
+- Zoom controls (+/- buttons, scroll wheel)
+- Pan with middle mouse button or hand tool
+- Multi-select with Shift+click
+- Keyboard shortcuts for tools
+- Right-click context menu
+- Real-time collaboration via Y.js
 
 ---
 
-## 6. Go Backend Implementation
+## 7. Acceptance Criteria
 
-### Directory Structure
-
-```
-cmd/
-  api/
-    main.go
-internal/
-  entity/
-    user.go
-    workspace.go
-    page.go
-    asset.go
-  usecase/
-    auth_usecase.go
-    workspace_usecase.go
-    page_usecase.go
-    asset_usecase.go
-  repository/
-    user_repository.go
-    workspace_repository.go
-    page_repository.go
-    asset_repository.go
-  handler/
-    auth_handler.go
-    workspace_handler.go
-    page_handler.go
-    asset_handler.go
-    websocket_handler.go
-  service/
-    s3_service.go
-    jwt_service.go
-  middleware/
-    auth.go
-config/
-  config.go
-```
-
-### Key Implementation Details
-
-1. **S3 Service** - Generate presigned URLs with configurable expiration (default 3600s)
-2. **Page Service** - Atomic BYTEA updates with optimistic locking via version field
-3. **WebSocket** - gorilla/websocket with Yjs sync protocol
-4. **JWT Auth** - Stateless authentication for scalability
+1. ✅ Page type is set at creation and cannot be changed
+2. ✅ Text mode works like Notion with blocks
+3. ✅ Board mode works like FigJam with toolbar
+4. ✅ Cursor stays in place while typing (no jumping) - fixed with proper contentEditable handling
+5. ✅ Right-click context menu with options
+6. ✅ Slash commands for quick block insertion
+7. ✅ Full backend sync for all data
+8. ✅ Real-time collaboration via WebSocket/Yjs
+9. ✅ Workspace sharing with roles
+10. ✅ Settings modal with export options
 
 ---
 
-## 7. Frontend Implementation
+## 8. Implementation Notes
 
-### Directory Structure
+### Cursor Issue Fix
+The original implementation used `dangerouslySetInnerHTML` and `onInput` with `innerHTML`, which caused cursor jumping. The fix uses:
+- Individual contentEditable elements for each block
+- Selection API for proper cursor positioning
+- Block-based state management with unique IDs
 
-```
-src/
-  components/
-    Sidebar/
-      Sidebar.tsx
-      PageTree.tsx
-    Editor/
-      BlockEditor.tsx
-      ImageBlock.tsx
-    Layout/
-      Header.tsx
-      Layout.tsx
-  hooks/
-    usePage.ts
-    useWebSocket.ts
-    useS3Upload.ts
-  services/
-    api.ts
-    websocket.ts
-  types/
-    index.ts
-  App.tsx
-  main.tsx
-```
+### Board Canvas
+Board editor uses HTML5 Canvas for rendering with:
+- Device pixel ratio support for crisp rendering
+- Grid background with pan/zoom
+- Object-based state for elements
+- Transform operations for multi-select
 
-### BlockSuite Integration
-
-1. Initialize BlockSuite editor in useEffect
-2. Create Yjs document and WebSocket provider
-3. Override default image upload to use S3 presigned URLs
-4. Handle sync and awareness states
-
----
-
-## 8. Docker Compose
-
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: blocknote
-      POSTGRES_PASSWORD: blocknote
-      POSTGRES_DB: blocknote
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
-  api:
-    build: ./backend
-    ports:
-      - "8080:8080"
-    environment:
-      DATABASE_URL: postgres://blocknote:blocknote@postgres:5432/blocknote?sslmode=disable
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_BUCKET: blocknote
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
-      JWT_SECRET: your-secret-key
-    depends_on:
-      - postgres
-      - redis
-      - minio
-
-volumes:
-  postgres_data:
-  minio_data:
-```
-
----
-
-## 9. Acceptance Criteria
-
-1. ✅ PostgreSQL schema created with all required tables
-2. ✅ Go backend implements all REST endpoints
-3. ✅ WebSocket handler broadcasts Yjs updates
-4. ✅ S3 presigned URL generation works
-5. ✅ React frontend initializes BlockSuite editor
-6. ✅ Real-time sync via WebSocket provider
-7. ✅ Image upload uses presigned URLs
-8. ✅ Sidebar displays nested page hierarchy
-9. ✅ Docker compose starts all services
-10. ✅ Clean Architecture with interfaces for DI
-11. ✅ All code uses TypeScript interfaces and Go interfaces
+### Y.js Integration
+Both editors use Y.js for real-time collaboration:
+- Y.Doc for document state
+- Y.Text for content storage
+- WebSocket provider for sync
+- Optimistic updates with conflict resolution
