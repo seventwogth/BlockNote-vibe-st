@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { Page } from '../../types';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { api } from '../../services/api';
 
 interface PageTreeProps {
   pages: Page[];
   selectedPageId?: string;
   onSelectPage: (pageId: string) => void;
   onCreatePage: (parentId?: string) => void;
+  onDeletePage?: (pageId: string) => void;
   level?: number;
 }
 
-export function PageTree({ pages, selectedPageId, onSelectPage, onCreatePage, level = 0 }: PageTreeProps) {
+export function PageTree({ pages, selectedPageId, onSelectPage, onCreatePage, onDeletePage, level = 0 }: PageTreeProps) {
   return (
     <div className="select-none">
       {pages.map((page) => (
@@ -19,6 +22,7 @@ export function PageTree({ pages, selectedPageId, onSelectPage, onCreatePage, le
           selectedPageId={selectedPageId}
           onSelectPage={onSelectPage}
           onCreatePage={onCreatePage}
+          onDeletePage={onDeletePage}
           level={level}
         />
       ))}
@@ -31,17 +35,33 @@ interface PageTreeItemProps {
   selectedPageId?: string;
   onSelectPage: (pageId: string) => void;
   onCreatePage: (parentId?: string) => void;
+  onDeletePage?: (pageId: string) => void;
   level: number;
 }
 
-function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, level }: PageTreeItemProps) {
+function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, onDeletePage, level }: PageTreeItemProps) {
   const [expanded, setExpanded] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const hasChildren = page.children && page.children.length > 0;
   const isSelected = selectedPageId === page.id;
 
   const getPageIcon = (pageType?: string) => {
     if (pageType === 'board') return '🎨';
     return page.icon || '📄';
+  };
+
+  const handleDelete = async () => {
+    if (onDeletePage) {
+      onDeletePage(page.id);
+    } else {
+      try {
+        await api.deletePage(page.id);
+        window.location.reload();
+      } catch (err) {
+        console.error('Failed to delete page:', err);
+      }
+    }
+    setShowDeleteConfirm(false);
   };
 
   return (
@@ -78,6 +98,16 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, level 
         >
           +
         </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDeleteConfirm(true);
+          }}
+          className="ml-1 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-red-500"
+          title="Delete page"
+        >
+          🗑️
+        </button>
       </div>
       
       {hasChildren && expanded && (
@@ -86,9 +116,21 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, level 
           selectedPageId={selectedPageId}
           onSelectPage={onSelectPage}
           onCreatePage={onCreatePage}
+          onDeletePage={onDeletePage}
           level={level + 1}
         />
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Page"
+        message={`Are you sure you want to delete "${page.title}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+        danger
+      />
     </div>
   );
 }

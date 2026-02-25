@@ -26,6 +26,7 @@ const commands: Command[] = [
   { label: 'Code', description: 'Capture a code snippet', icon: '<>', command: 'code' },
   { label: 'Divider', description: 'Visually divide blocks', icon: '—', command: 'divider' },
   { label: 'Callout', description: 'Make writing stand out', icon: '💡', command: 'callout' },
+  { label: 'Image', description: 'Upload or embed an image', icon: '🖼️', command: 'image' },
 ];
 
 export function SlashCommandMenu({ x, y, onSelect, onClose }: SlashCommandMenuProps) {

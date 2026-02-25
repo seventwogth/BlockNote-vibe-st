@@ -249,3 +249,35 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(workspace)
 }
+
+func (h *WorkspaceHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	workspaceID := strings.TrimPrefix(r.URL.Path, "/api/workspaces/")
+	if workspaceID == "" {
+		http.Error(w, "Workspace ID required", http.StatusBadRequest)
+		return
+	}
+
+	workspace, err := h.workspaceUseCase.GetByID(r.Context(), workspaceID)
+	if err != nil {
+		http.Error(w, "Workspace not found", http.StatusNotFound)
+		return
+	}
+
+	if workspace.OwnerID != userID {
+		http.Error(w, "Only owner can delete workspace", http.StatusForbidden)
+		return
+	}
+
+	if err := h.workspaceUseCase.Delete(r.Context(), workspaceID); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

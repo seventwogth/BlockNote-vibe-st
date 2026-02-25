@@ -1,18 +1,22 @@
 import { useState } from 'react';
 import { Workspace } from '../types';
 import { api } from '../services/api';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SettingsModalProps {
   workspace: Workspace;
   onClose: () => void;
   onUpdate: (workspace: Workspace) => void;
+  onDelete?: () => void;
 }
 
-export function SettingsModal({ workspace, onClose, onUpdate }: SettingsModalProps) {
+export function SettingsModal({ workspace, onClose, onUpdate, onDelete }: SettingsModalProps) {
   const [name, setName] = useState(workspace.name);
   const [icon, setIcon] = useState(workspace.icon || '📁');
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'export'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'export' | 'danger'>('general');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
 
   const handleSave = async () => {
     setSaving(true);
@@ -38,6 +42,21 @@ export function SettingsModal({ workspace, onClose, onUpdate }: SettingsModalPro
     URL.revokeObjectURL(url);
   };
 
+  const handleDeleteWorkspace = async () => {
+    if (confirmName !== workspace.name) return;
+    try {
+      await api.deleteWorkspace(workspace.id);
+      setShowDeleteConfirm(false);
+      if (onDelete) {
+        onDelete();
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to delete workspace:', err);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
@@ -49,17 +68,19 @@ export function SettingsModal({ workspace, onClose, onUpdate }: SettingsModalPro
         </div>
 
         <div className="flex border-b">
-          {(['general', 'appearance', 'export'] as const).map((tab) => (
+          {(['general', 'appearance', 'export', 'danger'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex-1 py-3 text-sm font-medium capitalize ${
                 activeTab === tab
-                  ? 'border-b-2 border-primary text-primary'
+                  ? tab === 'danger' 
+                    ? 'border-b-2 border-red-500 text-red-600' 
+                    : 'border-b-2 border-primary text-primary'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab}
+              {tab === 'danger' ? 'Danger Zone' : tab}
             </button>
           ))}
         </div>
@@ -158,7 +179,48 @@ export function SettingsModal({ workspace, onClose, onUpdate }: SettingsModalPro
               </p>
             </div>
           )}
+
+          {activeTab === 'danger' && (
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h3 className="text-red-800 font-medium mb-2">Delete Workspace</h3>
+                <p className="text-sm text-red-600 mb-4">
+                  This will permanently delete the workspace and all its pages. This action cannot be undone.
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm text-red-700 mb-1">
+                    Type <strong>{workspace.name}</strong> to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={confirmName}
+                    onChange={(e) => setConfirmName(e.target.value)}
+                    className="w-full px-3 py-2 border border-red-300 rounded focus:outline-none focus:border-red-500"
+                    placeholder={workspace.name}
+                  />
+                </div>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={confirmName !== workspace.name}
+                  className="w-full py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Delete Workspace
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          title="Delete Workspace"
+          message={`Are you sure you want to delete "${workspace.name}"? This will permanently delete the workspace and all its pages.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={handleDeleteWorkspace}
+          onCancel={() => setShowDeleteConfirm(false)}
+          danger
+        />
       </div>
     </div>
   );

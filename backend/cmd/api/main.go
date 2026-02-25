@@ -116,6 +116,8 @@ func main() {
 			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Get)).ServeHTTP(w, r)
 		case http.MethodPut:
 			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Update)).ServeHTTP(w, r)
+		case http.MethodDelete:
+			authMiddleware.Handler(http.HandlerFunc(workspaceHandler.Delete)).ServeHTTP(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}

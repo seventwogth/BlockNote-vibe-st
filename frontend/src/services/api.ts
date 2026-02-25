@@ -104,6 +104,12 @@ class ApiService {
     });
   }
 
+  async deleteWorkspace(workspaceId: string): Promise<void> {
+    return this.request<void>(`/workspaces/${workspaceId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async getWorkspacePages(workspaceId: string): Promise<Page[]> {
     return this.request<Page[]>(`/workspaces/${workspaceId}/pages`);
   }

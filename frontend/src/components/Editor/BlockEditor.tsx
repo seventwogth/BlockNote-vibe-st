@@ -6,6 +6,7 @@ import * as Y from 'yjs';
 import { ContextMenu } from './ContextMenu';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { FloatingToolbar } from './FloatingToolbar';
+import { ImageBlock } from './ImageBlock';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
@@ -15,7 +16,7 @@ interface BlockEditorProps {
 
 type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image';
 
-interface Block {
+export interface Block {
   id: string;
   type: BlockType;
   content: string;
@@ -96,6 +97,58 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
   }, [sendUpdate]);
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const historyRef = useRef<Block[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isUndoRedoRef = useRef(false);
+
+  const pushToHistory = useCallback((newBlocks: Block[]) => {
+    if (isUndoRedoRef.current) {
+      isUndoRedoRef.current = false;
+      return;
+    }
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push(JSON.parse(JSON.stringify(newBlocks)));
+    historyIndexRef.current = historyRef.current.length - 1;
+    if (historyRef.current.length > 50) {
+      historyRef.current.shift();
+      historyIndexRef.current--;
+    }
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      isUndoRedoRef.current = true;
+      historyIndexRef.current--;
+      setBlocks(JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current])));
+    }
+  }, []);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      isUndoRedoRef.current = true;
+      historyIndexRef.current++;
+      setBlocks(JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current])));
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   useEffect(() => {
     if (!ydocRef.current || !page) return;
@@ -177,6 +230,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
   };
 
   const updateBlocks = useCallback((newBlocks: Block[]) => {
+    pushToHistory(newBlocks);
     setBlocks(newBlocks);
     lastSavedContentRef.current = blocksToContent(newBlocks);
     
@@ -187,7 +241,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
         yText.insert(0, blocksToContent(newBlocks));
       });
     }
-  }, []);
+  }, [pushToHistory]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
@@ -381,6 +435,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
       case 'code': newType = 'code'; break;
       case 'divider': newType = 'divider'; break;
       case 'callout': newType = 'callout'; break;
+      case 'image': newType = 'image'; break;
     }
     
     const newBlocks = [...blocks];
@@ -508,6 +563,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
       case 'quote': return 'Quote';
       case 'code': return 'Code';
       case 'callout': return 'Callout';
+      case 'image': return 'Click to upload image';
       default: return "Type '/' for commands...";
     }
   };
@@ -546,6 +602,23 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
           <span className="px-2 py-1 bg-surface rounded text-xs">
             📄 Text
           </span>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={undo}
+              className="px-2 py-1 hover:bg-hover rounded text-xs"
+              title="Undo (Ctrl+Z)"
+            >
+              ↩
+            </button>
+            <button
+              onClick={redo}
+              className="px-2 py-1 hover:bg-hover rounded text-xs"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              ↪
+            </button>
+          </div>
           
           <span className={`text-xs ${
             saveStatus === 'saved' ? 'text-green-600' : 
@@ -578,21 +651,29 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
             <div className="w-6 h-6 flex items-center justify-center text-text-secondary opacity-0 group-hover:opacity-50 text-xs cursor-grab mt-1">
               ⋮⋮
             </div>
+            {block.type === 'image' ? (
+              <ImageBlock
+                block={block}
+                onUpdate={(content) => handleBlockContentChange(block.id, content)}
+                workspaceId={page?.workspace_id}
+              />
+            ) : (
+              <>
             <div
               id={`block-${block.id}`}
               contentEditable
-              data-placeholder={getBlockPlaceholder(block.type)}
+              data-placeholder={getBlockPlaceholder(block.type as BlockType)}
               className={`flex-1 outline-none min-h-[1.5em] ${
-                block.type === 'heading1' ? 'text-3xl font-bold mb-4 mt-2' :
-                block.type === 'heading2' ? 'text-2xl font-semibold mb-3 mt-1' :
-                block.type === 'heading3' ? 'text-xl font-medium mb-2' :
-                block.type === 'bullet' ? 'pl-2' :
-                block.type === 'numbered' ? 'pl-2' :
-                block.type === 'todo' ? 'flex items-center gap-2' :
-                block.type === 'quote' ? 'border-l-4 border-gray-300 pl-4 italic text-gray-600' :
-                block.type === 'code' ? 'font-mono bg-gray-100 p-2 rounded text-sm' :
-                block.type === 'divider' ? 'border-t border-gray-200 my-4' :
-                block.type === 'callout' ? 'bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex items-start gap-3' :
+                (block.type as BlockType) === 'heading1' ? 'text-3xl font-bold mb-4 mt-2' :
+                (block.type as BlockType) === 'heading2' ? 'text-2xl font-semibold mb-3 mt-1' :
+                (block.type as BlockType) === 'heading3' ? 'text-xl font-medium mb-2' :
+                (block.type as BlockType) === 'bullet' ? 'pl-2' :
+                (block.type as BlockType) === 'numbered' ? 'pl-2' :
+                (block.type as BlockType) === 'todo' ? 'flex items-center gap-2' :
+                (block.type as BlockType) === 'quote' ? 'border-l-4 border-gray-300 pl-4 italic text-gray-600' :
+                (block.type as BlockType) === 'code' ? 'font-mono bg-gray-100 p-2 rounded text-sm' :
+                (block.type as BlockType) === 'divider' ? 'border-t border-gray-200 my-4' :
+                (block.type as BlockType) === 'callout' ? 'bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex items-start gap-3' :
                 ''
               }`}
               onInput={(e) => {
@@ -604,6 +685,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
               dangerouslySetInnerHTML={{ __html: renderBlockContent(block) }}
               suppressContentEditableWarning
             />
+              </>
+            )}
           </div>
         ))}
       </div>

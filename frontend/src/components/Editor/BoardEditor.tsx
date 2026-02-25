@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { HexColorPicker } from 'react-colorful';
 import { PageWithContent } from '../../types';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import * as Y from 'yjs';
@@ -54,6 +55,7 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId?: string } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [textInput, setTextInput] = useState('');
+  const [showColorPicker, setShowColorPicker] = useState(false);
   
   const lastSavedContentRef = useRef<string>('');
 
@@ -123,7 +125,61 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     };
   }, [sendUpdate]);
 
+  const historyRef = useRef<BoardState[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isUndoRedoRef = useRef(false);
+
+  const pushToHistory = useCallback((newState: BoardState) => {
+    if (isUndoRedoRef.current) {
+      isUndoRedoRef.current = false;
+      return;
+    }
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push(JSON.parse(JSON.stringify(newState)));
+    historyIndexRef.current = historyRef.current.length - 1;
+    if (historyRef.current.length > 50) {
+      historyRef.current.shift();
+      historyIndexRef.current--;
+    }
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      isUndoRedoRef.current = true;
+      historyIndexRef.current--;
+      setBoardState(JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current])));
+    }
+  }, []);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      isUndoRedoRef.current = true;
+      historyIndexRef.current++;
+      setBoardState(JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current])));
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
   const updateBoardState = useCallback((newState: BoardState) => {
+    pushToHistory(newState);
     setBoardState(newState);
     lastSavedContentRef.current = JSON.stringify(newState);
     
@@ -134,7 +190,7 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
         yText.insert(0, JSON.stringify(newState));
       });
     }
-  }, []);
+  }, [pushToHistory]);
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -680,19 +736,44 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             🎨 Board
           </span>
 
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => setScale(s => Math.max(s * 0.8, 0.1))}
+              className="px-2 py-1 hover:bg-hover rounded text-xs"
+            >
+              -
+            </button>
+            <input
+              type="range"
+              min="10"
+              max="200"
+              value={Math.round(scale * 100)}
+              onChange={(e) => setScale(Number(e.target.value) / 100)}
+              className="w-24 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <span className="text-xs w-12 text-center">{Math.round(scale * 100)}%</span>
             <button
               onClick={() => setScale(s => Math.min(s * 1.2, 5))}
-              className="px-2 py-1 hover:bg-hover rounded"
+              className="px-2 py-1 hover:bg-hover rounded text-xs"
             >
               +
             </button>
-            <span className="text-xs w-12 text-center">{Math.round(scale * 100)}%</span>
+          </div>
+
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setScale(s => Math.max(s * 0.8, 0.1))}
-              className="px-2 py-1 hover:bg-hover rounded"
+              onClick={undo}
+              className="px-2 py-1 hover:bg-hover rounded text-xs"
+              title="Undo (Ctrl+Z)"
             >
-              -
+              ↩
+            </button>
+            <button
+              onClick={redo}
+              className="px-2 py-1 hover:bg-hover rounded text-xs"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              ↪
             </button>
           </div>
           
@@ -758,7 +839,17 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           
           <div className="w-px h-8 bg-border mx-1" />
           
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 relative">
+            <button
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center text-sm ${
+                showColorPicker ? 'border-primary' : 'border-transparent hover:bg-hover'
+              }`}
+              style={{ backgroundColor: currentColor }}
+              title="Color"
+            >
+              🎨
+            </button>
             {COLORS.slice(0, 5).map(color => (
               <button
                 key={color}
@@ -769,6 +860,21 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
                 style={{ backgroundColor: color }}
               />
             ))}
+            {showColorPicker && (
+              <div className="absolute bottom-full mb-2 left-0 z-50">
+                <div 
+                  className="fixed inset-0" 
+                  onClick={() => setShowColorPicker(false)} 
+                />
+                <div className="relative bg-white rounded-lg shadow-xl p-3 border">
+                  <HexColorPicker 
+                    color={currentColor} 
+                    onChange={setCurrentColor}
+                    style={{ width: '180px', height: '150px' }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

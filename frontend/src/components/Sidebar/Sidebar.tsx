@@ -39,6 +39,19 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
     }
   }, [selectedWorkspace]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[placeholder="Search pages..."]') as HTMLInputElement;
+        searchInput?.focus();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const loadWorkspaces = async () => {
     try {
       const data = await api.getWorkspaces() || [];
@@ -159,7 +172,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
         <div className="mb-2">
           <input
             type="text"
-            placeholder="Search pages..."
+            placeholder="Search pages... (Ctrl+K)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-2 py-1 text-sm border border-border rounded bg-white focus:outline-none focus:border-primary"
