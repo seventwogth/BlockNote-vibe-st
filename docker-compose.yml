@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: blocknote-postgres
+    environment:
+      POSTGRES_USER: blocknote
+      POSTGRES_PASSWORD: blocknote
+      POSTGRES_DB: blocknote
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blocknote"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: blocknote-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: blocknote-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: blocknote-api
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://blocknote:blocknote@postgres:5432/blocknote?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: blocknote
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      JWT_SECRET: your-secret-key-change-in-production
+      SERVER_PORT: "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: blocknote-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    environment:
+      VITE_API_URL: http://localhost:8080
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  default:
+    name: blocknote-network
