@@ -31,7 +31,6 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; blockId: string } | null>(null);
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null);
-  const [showSlashMenuFor, setShowSlashMenuFor] = useState<string | null>(null);
   const lastSavedContentRef = useRef<string>('');
   const isUpdatingRef = useRef(false);
   
@@ -133,6 +132,25 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
     return JSON.stringify(blocks);
   };
 
+  const stripHtml = (html: string): string => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
+
+  const isBlockEmpty = (content: string): boolean => {
+    if (!content) return true;
+    const stripped = stripHtml(content).trim();
+    return stripped === '';
+  };
+
+  const renderBlockContent = (block: Block): string => {
+    if (isBlockEmpty(block.content)) {
+      return '';
+    }
+    return block.content;
+  };
+
   const updateBlocks = useCallback((newBlocks: Block[]) => {
     setBlocks(newBlocks);
     lastSavedContentRef.current = blocksToContent(newBlocks);
@@ -157,15 +175,42 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
     }
   };
 
-  const handleBlockContentChange = useCallback((blockId: string, newContent: string) => {
+  const handleBlockContentChange = useCallback((blockId: string, newContent: string, cursorPosition?: number) => {
     const newBlocks = blocks.map(b => 
       b.id === blockId ? { ...b, content: newContent } : b
     );
-    updateBlocks(newBlocks);
-  }, [blocks, updateBlocks]);
+    
+    setBlocks(newBlocks);
+    lastSavedContentRef.current = blocksToContent(newBlocks);
+    
+    if (ydocRef.current) {
+      const yText = ydocRef.current.getText('content');
+      ydocRef.current.transact(() => {
+        yText.delete(0, yText.length);
+        yText.insert(0, blocksToContent(newBlocks));
+      });
+    }
+    
+    if (cursorPosition !== undefined) {
+      setTimeout(() => {
+        const editor = document.getElementById(`block-${blockId}`);
+        if (editor && editor.childNodes[0]) {
+          const range = document.createRange();
+          const sel = window.getSelection();
+          try {
+            range.setStart(editor.childNodes[0], Math.min(cursorPosition, editor.childNodes[0].textContent?.length || 0));
+            range.collapse(true);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          } catch (e) {          }
+        }
+      }, 0);
+    }
+  }, [blocks]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent, blockId: string) => {
     const blockIndex = blocks.findIndex(b => b.id === blockId);
+    const isEmptyBlock = stripHtml(blocks[blockIndex]?.content || '').trim() === '';
     
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -185,7 +230,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
       }, 0);
     }
     
-    if (e.key === 'Backspace' && blocks[blockIndex].content === '' && blocks.length > 1) {
+    if (e.key === 'Backspace' && isEmptyBlock && blocks.length > 1) {
       e.preventDefault();
       const newBlocks = blocks.filter(b => b.id !== blockId);
       updateBlocks(newBlocks);
@@ -227,21 +272,19 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
     if (e.key === 'ArrowDown' && blockIndex < blocks.length - 1) {
       const selection = window.getSelection();
       const blockEl = document.getElementById(`block-${blockId}`);
-      if (selection && blockEl) {
-        const textLength = blockEl.textContent?.length || 0;
-        if (selection.anchorOffset === textLength) {
-          e.preventDefault();
-          const nextBlock = document.getElementById(`block-${blocks[blockIndex + 1].id}`);
-          nextBlock?.focus();
-          
-          const range = document.createRange();
-          const sel = window.getSelection();
-          if (nextBlock && sel) {
-            range.selectNodeContents(nextBlock);
-            range.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(range);
-          }
+      const textLength = blockEl?.textContent?.length || 0;
+      if (selection && selection.anchorOffset === textLength) {
+        e.preventDefault();
+        const nextBlock = document.getElementById(`block-${blocks[blockIndex + 1].id}`);
+        nextBlock?.focus();
+        
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (nextBlock && sel) {
+          range.selectNodeContents(nextBlock);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
         }
       }
     }
@@ -250,7 +293,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
       const blockEl = document.getElementById(`block-${blockId}`);
       if (blockEl) {
         const selection = window.getSelection();
-        if (selection && selection.anchorOffset === blocks[blockIndex].content.length) {
+        const plainContent = stripHtml(blocks[blockIndex]?.content || '');
+        if (selection && selection.anchorOffset === plainContent.length) {
           setTimeout(() => {
             const rect = blockEl.getBoundingClientRect();
             setSlashMenu({ x: rect.left, y: rect.bottom, blockId });
@@ -284,7 +328,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
     
     const currentBlock = blocks[blockIndex];
     let newType: BlockType = 'text';
-    let newContent = currentBlock.content.replace(/^\//, '');
+    const plainContent = stripHtml(currentBlock.content);
+    const cleanContent = plainContent.replace(/^\//, '');
     
     switch (command) {
       case 'heading1': newType = 'heading1'; break;
@@ -300,7 +345,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
     }
     
     const newBlocks = [...blocks];
-    newBlocks[blockIndex] = { ...currentBlock, type: newType, content: newContent };
+    newBlocks[blockIndex] = { ...currentBlock, type: newType, content: cleanContent };
     updateBlocks(newBlocks);
     setSlashMenu(null);
     
@@ -486,6 +531,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
             <div
               id={`block-${block.id}`}
               contentEditable
+              data-placeholder={getBlockPlaceholder(block.type)}
               className={`flex-1 outline-none min-h-[1.5em] ${
                 block.type === 'heading1' ? 'text-3xl font-bold mb-4 mt-2' :
                 block.type === 'heading2' ? 'text-2xl font-semibold mb-3 mt-1' :
@@ -499,13 +545,13 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
                 block.type === 'callout' ? 'bg-yellow-50 p-4 rounded-lg border border-yellow-200' :
                 ''
               }`}
-              onInput={(e) => handleBlockContentChange(block.id, e.currentTarget.innerHTML)}
-              onKeyDown={(e) => handleKeyDown(e, block.id)}
-              onFocus={() => setShowSlashMenuFor(block.id)}
-              onBlur={() => setTimeout(() => setShowSlashMenuFor(null), 200)}
-              dangerouslySetInnerHTML={{ 
-                __html: block.content || (showSlashMenuFor === block.id ? '' : getBlockPlaceholder(block.type)) 
+              onInput={(e) => {
+                const sel = window.getSelection();
+                const cursorPos = sel?.anchorOffset;
+                handleBlockContentChange(block.id, e.currentTarget.innerHTML, cursorPos);
               }}
+              onKeyDown={(e) => handleKeyDown(e, block.id)}
+              dangerouslySetInnerHTML={{ __html: renderBlockContent(block) }}
               suppressContentEditableWarning
             />
           </div>

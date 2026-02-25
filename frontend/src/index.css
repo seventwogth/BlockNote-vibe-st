@@ -115,3 +115,15 @@ html, body {
 .presence-avatar:first-child {
   margin-left: 0;
 }
+
+[contentEditable]:empty:before,
+[contentEditable]:has(> br:only-child):before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+  display: block;
+}
+
+[contentEditable]:has(> br:only-child) {
+  min-height: 1.5em;
+}

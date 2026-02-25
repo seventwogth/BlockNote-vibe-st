@@ -8,9 +8,14 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ydocRef = useRef(ydoc);
+  
+  useEffect(() => {
+    ydocRef.current = ydoc;
+  }, [ydoc]);
 
-  const connect = useCallback(() => {
-    if (!pageId || !ydoc) return;
+  useEffect(() => {
+    if (!pageId || !ydocRef.current) return;
 
     const token = api.getToken();
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -18,6 +23,7 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
+    wsRef.current = ws;
 
     ws.onopen = () => {
       setConnected(true);
@@ -25,11 +31,11 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
     };
 
     ws.onmessage = (event) => {
-      if (!ydoc) return;
+      if (!ydocRef.current) return;
       
       const data = new Uint8Array(event.data as ArrayBuffer);
       try {
-        Y.applyUpdate(ydoc, data);
+        Y.applyUpdate(ydocRef.current, data);
       } catch (err) {
         console.warn('Failed to apply Yjs update:', err);
       }
@@ -43,20 +49,10 @@ export function useWebSocket(pageId: string | null, ydoc: Y.Doc | null) {
       setError('WebSocket connection error');
     };
 
-    wsRef.current = ws;
-
     return () => {
       ws.close();
     };
-  }, [pageId, ydoc]);
-
-  useEffect(() => {
-    const cleanup = connect();
-    return () => {
-      cleanup?.();
-      wsRef.current?.close();
-    };
-  }, [connect]);
+  }, [pageId]);
 
   const sendUpdate = useCallback((update: Uint8Array) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

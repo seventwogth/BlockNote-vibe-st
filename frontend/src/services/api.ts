@@ -103,11 +103,22 @@ class ApiService {
 
   async getPage(pageId: string): Promise<PageWithContent> {
     const response = await this.request<PageWithContent & { content: string }>(`/pages/${pageId}`);
+    let content = new Uint8Array(0);
+    if (response.content && response.content.length > 0) {
+      try {
+        const binaryString = atob(response.content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        content = bytes;
+      } catch (err) {
+        console.warn('Failed to decode content:', err);
+      }
+    }
     return {
       ...response,
-      content: new Uint8Array(
-        atob(response.content as unknown as string).split('').map(c => c.charCodeAt(0))
-      ),
+      content,
     };
   }
 

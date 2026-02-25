@@ -157,14 +157,20 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
           </span>
           <div className="flex gap-1">
             <button
-              onClick={() => handleCreatePageClick()}
+              onClick={() => {
+                setCreatePageParentId(undefined);
+                setShowCreatePageModal(true);
+              }}
               className="text-sm text-text-secondary hover:text-text-primary"
               title="New Text Page"
             >
               📄+
             </button>
             <button
-              onClick={() => handleCreatePageClick()}
+              onClick={() => {
+                setCreatePageParentId(undefined);
+                setShowCreatePageModal(true);
+              }}
               className="text-sm text-text-secondary hover:text-text-primary"
               title="New Board"
             >

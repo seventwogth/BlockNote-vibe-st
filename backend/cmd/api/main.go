@@ -127,7 +127,17 @@ func main() {
 			authMiddleware.Handler(http.HandlerFunc(pageHandler.UpdateContent)).ServeHTTP(w, r)
 			return
 		}
-		authMiddleware.Handler(http.HandlerFunc(pageHandler.Get)).ServeHTTP(w, r)
+
+		switch r.Method {
+		case http.MethodGet:
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.Get)).ServeHTTP(w, r)
+		case http.MethodPut:
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.Update)).ServeHTTP(w, r)
+		case http.MethodDelete:
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.Delete)).ServeHTTP(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	mux.HandleFunc("/api/assets/upload-url", func(w http.ResponseWriter, r *http.Request) {
