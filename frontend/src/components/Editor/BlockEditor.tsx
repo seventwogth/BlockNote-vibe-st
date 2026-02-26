@@ -7,11 +7,13 @@ import { ContextMenu } from './ContextMenu';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { FloatingToolbar } from './FloatingToolbar';
 import { ImageBlock } from './ImageBlock';
+import { Breadcrumb } from '../Breadcrumb';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
   onSaveContent: (content: Uint8Array) => void;
   onUpdatePage: (data: { title?: string; icon?: string }) => void;
+  onNavigate?: (pageId: string) => void;
 }
 
 type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image';
@@ -23,7 +25,7 @@ export interface Block {
   properties?: Record<string, unknown>;
 }
 
-export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorProps) {
+export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: BlockEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const [title, setTitle] = useState('');
@@ -578,6 +580,13 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage }: BlockEditorPr
 
   return (
     <div className="flex flex-col h-full" onClick={() => { setContextMenu(null); setSlashMenu(null); }}>
+      {page && onNavigate && (
+        <Breadcrumb
+          pageId={page.id}
+          workspaceId={page.workspace_id}
+          onNavigate={onNavigate}
+        />
+      )}
       <div className="px-12 py-8">
         <div className="flex items-center gap-2 mb-4">
           <button className="text-3xl hover:bg-hover p-1 rounded">

@@ -1,11 +1,11 @@
 -- BlockNote Database Schema
 -- PostgreSQL 16+
 
--- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
--- Users table
-CREATE TABLE users (
+-- Users
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -15,20 +15,24 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Index for user lookups
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- Workspaces table (multi-tenant)
-CREATE TABLE workspaces (
+-- Workspaces
+CREATE TABLE IF NOT EXISTS workspaces (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
+    icon VARCHAR(10),
+    description TEXT,
     owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
+
 -- Workspace members
-CREATE TABLE workspace_members (
+CREATE TABLE IF NOT EXISTS workspace_members (
     workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(50) DEFAULT 'member',
@@ -36,39 +40,47 @@ CREATE TABLE workspace_members (
     PRIMARY KEY (workspace_id, user_id)
 );
 
--- Index for workspace member lookups
-CREATE INDEX idx_workspace_members_user ON workspace_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
 
--- Pages table
-CREATE TABLE pages (
+-- Pages
+CREATE TABLE IF NOT EXISTS pages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-    parent_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+    parent_id UUID REFERENCES pages(id) ON DELETE SET NULL,
     owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(500) DEFAULT 'Untitled',
     icon VARCHAR(10),
     page_type VARCHAR(20) DEFAULT 'text' NOT NULL,
+    content_text TEXT DEFAULT '',
     is_archived BOOLEAN DEFAULT FALSE,
+    is_favorite BOOLEAN DEFAULT FALSE,
+    last_accessed TIMESTAMP WITH TIME ZONE,
+    position INTEGER DEFAULT 0,
+    tags TEXT[] DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indexes for pages
-CREATE INDEX idx_pages_workspace ON pages(workspace_id);
-CREATE INDEX idx_pages_parent ON pages(parent_id);
-CREATE INDEX idx_pages_owner ON pages(owner_id);
-CREATE INDEX idx_pages_type ON pages(page_type);
+CREATE INDEX IF NOT EXISTS idx_pages_workspace ON pages(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_id);
+CREATE INDEX IF NOT EXISTS idx_pages_owner ON pages(owner_id);
+CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(page_type);
+CREATE INDEX IF NOT EXISTS idx_pages_archived ON pages(is_archived);
+CREATE INDEX IF NOT EXISTS idx_pages_favorite ON pages(is_favorite);
+CREATE INDEX IF NOT EXISTS idx_pages_accessed ON pages(last_accessed);
+CREATE INDEX IF NOT EXISTS idx_pages_title_trgm ON pages USING gin (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_pages_position ON pages(workspace_id, parent_id, position);
 
--- Page contents (Yjs binary data)
-CREATE TABLE page_contents (
+-- Page contents
+CREATE TABLE IF NOT EXISTS page_contents (
     page_id UUID PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
     content BYTEA NOT NULL DEFAULT '',
     version INTEGER DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Assets table (S3 metadata)
-CREATE TABLE assets (
+-- Assets
+CREATE TABLE IF NOT EXISTS assets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
@@ -80,12 +92,11 @@ CREATE TABLE assets (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indexes for assets
-CREATE INDEX idx_assets_page ON assets(page_id);
-CREATE INDEX idx_assets_workspace ON assets(workspace_id);
-CREATE INDEX idx_assets_user ON assets(user_id);
+CREATE INDEX IF NOT EXISTS idx_assets_page ON assets(page_id);
+CREATE INDEX IF NOT EXISTS idx_assets_workspace ON assets(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_assets_user ON assets(user_id);
 
--- Function to update updated_at timestamp
+-- Triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -94,7 +105,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Triggers for updated_at
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

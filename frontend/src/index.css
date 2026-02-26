@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f9fafb;
+  --color-bg-hover: #f3f4f6;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-text-secondary: #6b7280;
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+}
+
+.dark {
+  --color-bg: #111827;
+  --color-bg-secondary: #1f2937;
+  --color-bg-hover: #374151;
+  --color-border: #374151;
+  --color-text: #f9fafb;
+  --color-text-secondary: #9ca3af;
+  --color-primary: #60a5fa;
+  --color-primary-hover: #3b82f6;
+  --color-success: #34d399;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -12,11 +40,39 @@ html, body {
   font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
 #root {
   height: 100%;
   display: flex;
+}
+
+.bg-surface { background-color: var(--color-bg); }
+.bg-surface-secondary { background-color: var(--color-bg-secondary); }
+.bg-hover { background-color: var(--color-bg-hover); }
+.bg-primary { background-color: var(--color-primary); }
+.hover\:bg-hover:hover { background-color: var(--color-bg-hover); }
+.hover\:bg-primary:hover { background-color: var(--color-primary-hover); }
+.hover\:opacity-90:hover { opacity: 0.9; }
+.hover\:text-primary:hover { color: var(--color-primary); }
+.hover\:underline:hover { text-decoration: underline; }
+
+.border-border { border-color: var(--color-border); }
+.border-primary { border-color: var(--color-primary); }
+
+.text-text { color: var(--color-text); }
+.text-text-secondary { color: var(--color-text-secondary); }
+.text-primary { color: var(--color-primary); }
+
+.focus\:border-primary:focus { border-color: var(--color-primary); }
+.focus\:border-primary:focus { border-color: var(--color-primary); }
+
+input, select, textarea {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
 .edgeless-mode {
@@ -26,16 +82,14 @@ html, body {
   background-size: 20px 20px;
 }
 
+.dark .edgeless-mode {
+  background-color: #1f2937;
+  background-image: 
+    radial-gradient(circle, #374151 1px, transparent 1px);
+}
+
 .page-mode {
-  background-color: #fff;
-}
-
-.affine-edgeless-surface-block {
-  background-color: transparent !important;
-}
-
-.affine-page-root {
-  background-color: #fff !important;
+  background-color: var(--color-bg);
 }
 
 .block-editor-container {
@@ -44,7 +98,7 @@ html, body {
 
 .slash-menu {
   position: absolute;
-  background: white;
+  background: var(--color-bg);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   padding: 8px;
@@ -65,12 +119,12 @@ html, body {
 }
 
 .slash-menu-item:hover {
-  background-color: #f5f5f5;
+  background-color: var(--color-bg-hover);
 }
 
 .bubble-menu {
   position: absolute;
-  background: white;
+  background: var(--color-bg);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   padding: 4px;
@@ -89,7 +143,7 @@ html, body {
 }
 
 .bubble-menu button:hover {
-  background-color: #f5f5f5;
+  background-color: var(--color-bg-hover);
 }
 
 .presence-avatars {
@@ -101,7 +155,7 @@ html, body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid white;
+  border: 2px solid var(--color-bg);
   margin-left: -8px;
   display: flex;
   align-items: center;
@@ -119,7 +173,7 @@ html, body {
 [contentEditable]:empty:before,
 [contentEditable]:has(> br:only-child):before {
   content: attr(data-placeholder);
-  color: #9ca3af;
+  color: var(--color-text-secondary);
   pointer-events: none;
   display: block;
 }
@@ -141,4 +195,32 @@ html, body {
 
 .animate-slide-in {
   animation: slideIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--color-bg-hover) 25%, var(--color-bg-secondary) 50%, var(--color-bg-hover) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }

@@ -138,6 +138,22 @@ func main() {
 			authMiddleware.Handler(http.HandlerFunc(pageHandler.UpdateContent)).ServeHTTP(w, r)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/archive") {
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.Archive)).ServeHTTP(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/restore") {
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.Restore)).ServeHTTP(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/move") {
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.Move)).ServeHTTP(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/favorite") {
+			authMiddleware.Handler(http.HandlerFunc(pageHandler.ToggleFavorite)).ServeHTTP(w, r)
+			return
+		}
 
 		switch r.Method {
 		case http.MethodGet:
@@ -149,6 +165,22 @@ func main() {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	mux.HandleFunc("/api/pages/recent", func(w http.ResponseWriter, r *http.Request) {
+		authMiddleware.Handler(http.HandlerFunc(pageHandler.Recent)).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/pages/favorites", func(w http.ResponseWriter, r *http.Request) {
+		authMiddleware.Handler(http.HandlerFunc(pageHandler.Favorites)).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/pages/archived", func(w http.ResponseWriter, r *http.Request) {
+		authMiddleware.Handler(http.HandlerFunc(pageHandler.Archived)).ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/pages/search", func(w http.ResponseWriter, r *http.Request) {
+		authMiddleware.Handler(http.HandlerFunc(pageHandler.Search)).ServeHTTP(w, r)
 	})
 
 	mux.HandleFunc("/api/assets/upload-url", func(w http.ResponseWriter, r *http.Request) {

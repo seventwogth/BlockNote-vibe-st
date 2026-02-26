@@ -6,13 +6,18 @@ import {
   WorkspaceWithMembers,
   WorkspaceMember,
   CreateWorkspaceRequest,
+  UpdateWorkspaceRequest,
   Page,
   PageWithContent,
   CreatePageRequest,
   UpdatePageRequest,
+  MovePageRequest,
+  SearchPageRequest,
   GetUploadURLRequest,
   GetUploadURLResponse,
   GetDownloadURLResponse,
+  TrashItem,
+  ShareResponse,
 } from '../types';
 
 const API_BASE = '/api';
@@ -97,7 +102,11 @@ class ApiService {
     });
   }
 
-  async updateWorkspace(workspaceId: string, data: { name?: string; icon?: string }): Promise<Workspace> {
+  async getWorkspace(workspaceId: string): Promise<Workspace> {
+    return this.request<Workspace>(`/workspaces/${workspaceId}`);
+  }
+
+  async updateWorkspace(workspaceId: string, data: UpdateWorkspaceRequest): Promise<Workspace> {
     return this.request<Workspace>(`/workspaces/${workspaceId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -155,6 +164,52 @@ class ApiService {
     });
   }
 
+  async archivePage(pageId: string): Promise<Page> {
+    return this.request<Page>(`/pages/${pageId}/archive`, {
+      method: 'POST',
+    });
+  }
+
+  async restorePage(pageId: string): Promise<Page> {
+    return this.request<Page>(`/pages/${pageId}/restore`, {
+      method: 'POST',
+    });
+  }
+
+  async movePage(pageId: string, data: MovePageRequest): Promise<Page> {
+    return this.request<Page>(`/pages/${pageId}/move`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async toggleFavorite(pageId: string): Promise<Page> {
+    return this.request<Page>(`/pages/${pageId}/favorite`, {
+      method: 'POST',
+    });
+  }
+
+  async getRecentPages(limit?: number): Promise<Page[]> {
+    const query = limit ? `?limit=${limit}` : '';
+    return this.request<Page[]>(`/pages/recent${query}`);
+  }
+
+  async getFavoritePages(workspaceId: string): Promise<Page[]> {
+    return this.request<Page[]>(`/pages/favorites?workspace_id=${workspaceId}`);
+  }
+
+  async getArchivedPages(workspaceId: string): Promise<Page[]> {
+    return this.request<Page[]>(`/pages/archived?workspace_id=${workspaceId}`);
+  }
+
+  async searchPages(req: SearchPageRequest): Promise<Page[]> {
+    const params = new URLSearchParams();
+    if (req.q) params.append('q', req.q);
+    if (req.type) params.append('type', req.type);
+    if (req.workspace_id) params.append('workspace_id', req.workspace_id);
+    return this.request<Page[]>(`/pages/search?${params.toString()}`);
+  }
+
   async updatePageContent(pageId: string, content: Uint8Array): Promise<void> {
     let binary = '';
     const bytes = new Uint8Array(content);
@@ -204,6 +259,45 @@ class ApiService {
     return this.request<void>(`/workspaces/${workspaceId}/members/${memberId}`, {
       method: 'PUT',
       body: JSON.stringify({ role }),
+    });
+  }
+
+  async getTrash(workspaceId: string): Promise<TrashItem[]> {
+    return this.request<TrashItem[]>(`/trash?workspace_id=${workspaceId}`);
+  }
+
+  async restoreTrashItem(trashId: string): Promise<void> {
+    return this.request<void>(`/trash/${trashId}/restore`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteTrashItem(trashId: string): Promise<void> {
+    return this.request<void>(`/trash/${trashId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async emptyTrash(workspaceId: string): Promise<void> {
+    return this.request<void>(`/trash/empty?workspace_id=${workspaceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async sharePage(pageId: string, accessLevel: string, expiresAt?: string): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/pages/${pageId}/share`, {
+      method: 'POST',
+      body: JSON.stringify({ access_level: accessLevel, expires_at: expiresAt }),
+    });
+  }
+
+  async getPageShares(pageId: string): Promise<ShareResponse[]> {
+    return this.request<ShareResponse[]>(`/pages/${pageId}/shares`);
+  }
+
+  async revokeShare(token: string): Promise<void> {
+    return this.request<void>(`/share/${token}`, {
+      method: 'DELETE',
     });
   }
 }

@@ -11,9 +11,17 @@ export interface Workspace {
   id: string;
   name: string;
   icon?: string;
+  description?: string;
   owner_id: string;
+  settings?: WorkspaceSettings;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkspaceSettings {
+  allow_public_sharing?: boolean;
+  default_page_type?: string;
+  enable_comments?: boolean;
 }
 
 export interface WorkspaceMember {
@@ -36,7 +44,12 @@ export interface Page {
   title: string;
   icon?: string;
   page_type: 'text' | 'board';
+  content_text?: string;
   is_archived: boolean;
+  is_favorite?: boolean;
+  last_accessed?: string;
+  position?: number;
+  tags?: string[];
   created_at: string;
   updated_at: string;
   children?: Page[];
@@ -44,6 +57,34 @@ export interface Page {
 
 export interface PageWithContent extends Page {
   content: Uint8Array;
+}
+
+export interface TrashItem {
+  id: string;
+  item_type: 'page' | 'workspace' | 'asset';
+  item_id: string;
+  workspace_id: string;
+  deleted_by?: string;
+  original_data?: Record<string, unknown>;
+  deleted_at: string;
+  expires_at: string;
+}
+
+export interface SharedPage {
+  id: string;
+  page_id: string;
+  token: string;
+  access_level: 'view' | 'edit' | 'comment';
+  created_by?: string;
+  expires_at?: string;
+  created_at: string;
+}
+
+export interface ShareResponse {
+  token: string;
+  url: string;
+  access_level: string;
+  expires_at?: string;
 }
 
 export interface AuthResponse {
@@ -64,6 +105,14 @@ export interface LoginRequest {
 
 export interface CreateWorkspaceRequest {
   name: string;
+  icon?: string;
+  description?: string;
+}
+
+export interface UpdateWorkspaceRequest {
+  name?: string;
+  icon?: string;
+  description?: string;
 }
 
 export interface CreatePageRequest {
@@ -78,6 +127,21 @@ export interface UpdatePageRequest {
   title?: string;
   icon?: string;
   is_archived?: boolean;
+  is_favorite?: boolean;
+  parent_id?: string;
+  position?: number;
+  tags?: string[];
+}
+
+export interface MovePageRequest {
+  parent_id?: string;
+  position: number;
+}
+
+export interface SearchPageRequest {
+  q: string;
+  type?: string;
+  workspace_id?: string;
 }
 
 export interface GetUploadURLRequest {

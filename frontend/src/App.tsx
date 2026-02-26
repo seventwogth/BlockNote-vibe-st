@@ -4,7 +4,8 @@ import { Sidebar } from './components/Sidebar/Sidebar';
 import { BlockEditor } from './components/Editor/BlockEditor';
 import { BoardEditor } from './components/Editor/BoardEditor';
 import { ToastContainer } from './components/Toast';
-import { ToastProvider } from './hooks/useToast';
+import { ToastProvider, useToast } from './hooks/useToast';
+import { useTheme } from './hooks/useTheme.tsx';
 import { usePage } from './hooks/usePage';
 import { api } from './services/api';
 import { User } from './types';
@@ -13,6 +14,8 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const { showToast } = useToast();
+  useTheme();
 
   const { page, loading, updatePage, saveContent } = usePage(selectedPageId);
 
@@ -29,13 +32,15 @@ function App() {
       const response = await api.register({ email, password, name });
       setUser(response.user);
       setToken(response.token);
+      showToast('Welcome!', 'success');
     } catch (err) {
       try {
         const response = await api.login({ email, password });
         setUser(response.user);
         setToken(response.token);
+        showToast('Welcome back!', 'success');
       } catch (loginErr) {
-        alert('Login failed');
+        showToast('Login failed. Please check your credentials.', 'error');
       }
     }
   };
@@ -96,6 +101,7 @@ function App() {
             page={page}
             onSaveContent={handleSaveContent}
             onUpdatePage={handleUpdatePage}
+            onNavigate={handleSelectPage}
           />
         )}
       </Layout>

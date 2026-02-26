@@ -7,12 +7,25 @@ interface PageTreeProps {
   pages: Page[];
   selectedPageId?: string;
   onSelectPage: (pageId: string) => void;
-  onCreatePage: (parentId?: string) => void;
+  onCreatePage?: (parentId?: string) => void;
   onDeletePage?: (pageId: string) => void;
+  onToggleFavorite?: (pageId: string) => void;
+  onArchive?: (pageId: string) => void;
   level?: number;
+  showActions?: boolean;
 }
 
-export function PageTree({ pages, selectedPageId, onSelectPage, onCreatePage, onDeletePage, level = 0 }: PageTreeProps) {
+export function PageTree({ 
+  pages, 
+  selectedPageId, 
+  onSelectPage, 
+  onCreatePage, 
+  onDeletePage,
+  onToggleFavorite,
+  onArchive,
+  level = 0,
+  showActions = true
+}: PageTreeProps) {
   return (
     <div className="select-none">
       {pages.map((page) => (
@@ -23,7 +36,10 @@ export function PageTree({ pages, selectedPageId, onSelectPage, onCreatePage, on
           onSelectPage={onSelectPage}
           onCreatePage={onCreatePage}
           onDeletePage={onDeletePage}
+          onToggleFavorite={onToggleFavorite}
+          onArchive={onArchive}
           level={level}
+          showActions={showActions}
         />
       ))}
     </div>
@@ -34,12 +50,25 @@ interface PageTreeItemProps {
   page: Page;
   selectedPageId?: string;
   onSelectPage: (pageId: string) => void;
-  onCreatePage: (parentId?: string) => void;
+  onCreatePage?: (parentId?: string) => void;
   onDeletePage?: (pageId: string) => void;
+  onToggleFavorite?: (pageId: string) => void;
+  onArchive?: (pageId: string) => void;
   level: number;
+  showActions: boolean;
 }
 
-function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, onDeletePage, level }: PageTreeItemProps) {
+function PageTreeItem({ 
+  page, 
+  selectedPageId, 
+  onSelectPage, 
+  onCreatePage, 
+  onDeletePage,
+  onToggleFavorite,
+  onArchive,
+  level,
+  showActions
+}: PageTreeItemProps) {
   const [expanded, setExpanded] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const hasChildren = page.children && page.children.length > 0;
@@ -64,6 +93,16 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, onDele
     setShowDeleteConfirm(false);
   };
 
+  const handleToggleFavorite = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite?.(page.id);
+  };
+
+  const handleArchive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onArchive?.(page.id);
+  };
+
   return (
     <div>
       <div
@@ -86,28 +125,55 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, onDele
         )}
         {!hasChildren && <div className="w-4" />}
         
-        <span className="text-sm truncate">{getPageIcon(page.page_type)}</span>
-        <span className="text-sm text-text-primary truncate">{page.title}</span>
-        
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onCreatePage(page.id);
-          }}
-          className="ml-auto opacity-0 group-hover:opacity-100 text-text-secondary hover:text-text-primary"
-        >
-          +
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowDeleteConfirm(true);
-          }}
-          className="ml-1 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-red-500"
-          title="Delete page"
-        >
-          🗑️
-        </button>
+        <span className="text-sm">{getPageIcon(page.page_type)}</span>
+        <span className={`text-sm truncate ${page.is_favorite ? 'font-medium' : ''}`}>
+          {page.title}
+        </span>
+
+        {showActions && (
+          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            {onToggleFavorite && (
+              <button
+                onClick={handleToggleFavorite}
+                className="p-0.5 text-text-secondary hover:text-yellow-500"
+                title={page.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {page.is_favorite ? '⭐' : '☆'}
+              </button>
+            )}
+            {onArchive && (
+              <button
+                onClick={handleArchive}
+                className="p-0.5 text-text-secondary hover:text-text-primary"
+                title="Archive page"
+              >
+                📦
+              </button>
+            )}
+            {onCreatePage && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreatePage(page.id);
+                }}
+                className="p-0.5 text-text-secondary hover:text-text-primary"
+                title="Add subpage"
+              >
+                +
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDeleteConfirm(true);
+              }}
+              className="p-0.5 text-text-secondary hover:text-red-500"
+              title="Delete page"
+            >
+              🗑️
+            </button>
+          </div>
+        )}
       </div>
       
       {hasChildren && expanded && (
@@ -117,7 +183,10 @@ function PageTreeItem({ page, selectedPageId, onSelectPage, onCreatePage, onDele
           onSelectPage={onSelectPage}
           onCreatePage={onCreatePage}
           onDeletePage={onDeletePage}
+          onToggleFavorite={onToggleFavorite}
+          onArchive={onArchive}
           level={level + 1}
+          showActions={showActions}
         />
       )}
 

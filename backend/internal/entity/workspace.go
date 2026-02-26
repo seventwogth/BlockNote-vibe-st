@@ -1,16 +1,25 @@
 package entity
 
 import (
+	"encoding/json"
 	"time"
 )
 
 type Workspace struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Icon      string    `json:"icon,omitempty"`
-	OwnerID   string    `json:"owner_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Icon        string          `json:"icon,omitempty"`
+	Description string          `json:"description,omitempty"`
+	OwnerID     string          `json:"owner_id"`
+	Settings    json.RawMessage `json:"settings,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+type WorkspaceSettings struct {
+	AllowPublicSharing bool   `json:"allow_public_sharing"`
+	DefaultPageType    string `json:"default_page_type"`
+	EnableComments     bool   `json:"enable_comments"`
 }
 
 type WorkspaceMember struct {
@@ -22,8 +31,15 @@ type WorkspaceMember struct {
 }
 
 type CreateWorkspaceRequest struct {
-	Name string `json:"name"`
-	Icon string `json:"icon,omitempty"`
+	Name        string `json:"name"`
+	Icon        string `json:"icon,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type UpdateWorkspaceRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Icon        *string `json:"icon,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type InviteUserRequest struct {
