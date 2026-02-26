@@ -45,6 +45,9 @@ export function FloatingToolbar({ x, y, onFormat, onClose }: FloatingToolbarProp
     { format: 'strike', icon: 'S', title: 'Strikethrough', strike: true },
     { format: 'code', icon: '<>', title: 'Code' },
     { format: 'link', icon: '🔗', title: 'Link' },
+    { format: 'highlight', icon: 'H', title: 'Highlight', highlight: true },
+    { format: 'subscript', icon: 'ₓ', title: 'Subscript', subscript: true },
+    { format: 'superscript', icon: 'ˣ', title: 'Superscript', superscript: true },
   ];
 
   return (
@@ -64,6 +67,9 @@ export function FloatingToolbar({ x, y, onFormat, onClose }: FloatingToolbarProp
             fontStyle: btn.italic ? 'italic' : undefined,
             textDecoration: btn.underline ? 'underline' : undefined,
             textDecorationLine: btn.strike ? 'line-through' : undefined,
+            backgroundColor: btn.highlight ? '#fef08a' : undefined,
+            verticalAlign: btn.subscript ? 'sub' : btn.superscript ? 'super' : undefined,
+            fontSize: btn.superscript ? '0.7em' : undefined,
           }}
         >
           {btn.icon}

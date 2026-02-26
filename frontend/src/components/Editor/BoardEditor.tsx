@@ -1413,6 +1413,14 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           onWheel={handleWheel}
           onContextMenu={handleContextMenu}
         />
+
+        {boardState.elements.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <div className="text-6xl mb-4">🎨</div>
+            <p className="text-lg font-medium text-text-secondary mb-2">Начните рисовать...</p>
+            <p className="text-sm text-text-secondary">Перетащите фигуры из панели инструментов</p>
+          </div>
+        )}
         
         {editingTextId && (
           <input

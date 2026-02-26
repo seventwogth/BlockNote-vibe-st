@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Workspace } from '../types';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useTheme } from '../hooks/useTheme';
 
 interface SettingsModalProps {
   workspace: Workspace;
@@ -17,6 +18,7 @@ export function SettingsModal({ workspace, onClose, onUpdate, onDelete }: Settin
   const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'export' | 'danger'>('general');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [confirmName, setConfirmName] = useState('');
+  const { theme, setTheme } = useTheme();
 
   const handleSave = async () => {
     setSaving(true);
@@ -149,16 +151,22 @@ export function SettingsModal({ workspace, onClose, onUpdate, onDelete }: Settin
               <div>
                 <label className="block text-sm font-medium mb-2">Theme</label>
                 <div className="flex gap-2">
-                  <button className="flex-1 py-3 border rounded hover:bg-surface">
+                  <button 
+                    onClick={() => setTheme('light')}
+                    className={`flex-1 py-3 border rounded ${theme === 'light' ? 'bg-primary text-white' : 'hover:bg-surface'}`}
+                  >
                     ☀️ Light
                   </button>
-                  <button className="flex-1 py-3 border rounded hover:bg-surface">
+                  <button 
+                    onClick={() => setTheme('dark')}
+                    className={`flex-1 py-3 border rounded ${theme === 'dark' ? 'bg-primary text-white' : 'hover:bg-surface'}`}
+                  >
                     🌙 Dark
                   </button>
-                  <button className="flex-1 py-3 border rounded hover:bg-surface">
-                    💻 System
-                  </button>
                 </div>
+                <p className="text-xs text-text-secondary mt-2">
+                  Current theme: {theme === 'dark' ? 'Dark mode enabled' : 'Light mode enabled'}
+                </p>
               </div>
             </div>
           )}

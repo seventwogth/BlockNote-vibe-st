@@ -3,10 +3,16 @@ import { PageWithContent } from '../../types';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useS3Upload } from '../../hooks/useS3Upload';
 import * as Y from 'yjs';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { ContextMenu } from './ContextMenu';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { FloatingToolbar } from './FloatingToolbar';
 import { ImageBlock } from './ImageBlock';
+import { Breadcrumb } from '../Breadcrumb';
+import { ShortcutHelpModal } from './ShortcutHelpModal';
+import { EmbedBlock } from './EmbedBlock';
+import { TableBlock } from './TableBlock';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
@@ -15,7 +21,7 @@ interface BlockEditorProps {
   onNavigate?: (pageId: string) => void;
 }
 
-type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image' | 'table' | 'video' | 'audio' | 'math' | 'toggle' | 'bookmark';
+type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image' | 'table' | 'video' | 'audio' | 'math' | 'toggle' | 'bookmark' | 'embed';
 
 interface Block {
   id: string;
@@ -49,6 +55,20 @@ const BLOCK_COLORS: BlockColor[] = [
   { name: 'Red', bg: '#fef2f2', text: '#dc2626' },
 ];
 
+const tryRenderLatex = (content: string): string => {
+  try {
+    if (content.includes('\\') || content.includes('^') || content.includes('_') || content.includes('{')) {
+      return katex.renderToString(content, {
+        throwOnError: false,
+        displayMode: true,
+      });
+    }
+    return content;
+  } catch {
+    return content;
+  }
+};
+
 export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _onNavigate }: BlockEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
@@ -64,6 +84,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
   const [showColorPicker, setShowColorPicker] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const lastSavedContentRef = useRef<string>('');
   const isUpdatingRef = useRef(false);
   
@@ -78,6 +99,17 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
   const readingTime = useMemo(() => {
     return Math.max(1, Math.ceil(wordCount / 200));
   }, [wordCount]);
+
+  const todoProgress = useMemo(() => {
+    const todoBlocks = blocks.filter(b => b.type === 'todo');
+    if (todoBlocks.length === 0) return null;
+    const completed = todoBlocks.filter(b => b.content.startsWith('<input type="checkbox" checked'));
+    return {
+      total: todoBlocks.length,
+      completed: completed.length,
+      percentage: Math.round((completed.length / todoBlocks.length) * 100),
+    };
+  }, [blocks]);
 
   useEffect(() => {
     if (!page) return;
@@ -193,6 +225,10 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault();
         setFocusMode(f => !f);
+      }
+      if (e.key === '?' || ((e.metaKey || e.ctrlKey) && e.key === '/')) {
+        e.preventDefault();
+        setShowShortcuts(s => !s);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -509,6 +545,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       case 'math': newType = 'math'; break;
       case 'toggle': newType = 'toggle'; break;
       case 'bookmark': newType = 'bookmark'; break;
+      case 'embed': newType = 'embed'; break;
       default: newType = 'text';
     }
 
@@ -517,7 +554,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       newBlock = { id: `${Date.now()}`, type: 'table', content: '3x3', children: [] };
     } else if (newType === 'toggle') {
       newBlock = { id: `${Date.now()}`, type: 'toggle', content: cleanContent || 'Toggle', children: [{ id: `${Date.now()}-child`, type: 'text', content: '' }], collapsed: false };
-    } else if (newType === 'video' || newType === 'audio' || newType === 'bookmark' || newType === 'math') {
+    } else if (newType === 'video' || newType === 'audio' || newType === 'bookmark' || newType === 'math' || newType === 'embed') {
       newBlock = { id: `${Date.now()}`, type: newType, content: '' };
     } else {
       newBlock = { ...currentBlock, type: newType, content: cleanContent };
@@ -588,6 +625,15 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
         if (url) {
           document.execCommand('createLink', false, url);
         }
+        break;
+      case 'highlight':
+        document.execCommand('hiliteColor', false, '#fef08a');
+        break;
+      case 'subscript':
+        document.execCommand('subscript', false);
+        break;
+      case 'superscript':
+        document.execCommand('superscript', false);
         break;
     }
     
@@ -660,6 +706,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       case 'math': return 'LaTeX equation (e.g. x^2 + y^2 = r^2)';
       case 'toggle': return 'Toggle';
       case 'bookmark': return 'Paste URL to bookmark';
+      case 'embed': return 'Paste URL to embed (YouTube, Twitter, etc.)';
       default: return "Type '/' for commands...";
     }
   };
@@ -725,30 +772,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
             pageId={page?.id || ''}
           />
         ) : block.type === 'table' ? (
-          <div className="w-full overflow-x-auto">
-            <table className="w-full border-collapse border border-gray-200">
-              <tbody>
-                {[0, 1, 2].map((_row, ri) => (
-                  <tr key={ri}>
-                    {[0, 1, 2].map((_col, ci) => (
-                      <td key={ci} className="border border-gray-200 p-2">
-                        <input
-                          className="w-full outline-none bg-transparent"
-                          placeholder={ri === 0 ? `Header ${ci + 1}` : ''}
-                          onFocus={(e) => {
-                            if (ri === 0) e.target.placeholder = '';
-                          }}
-                          onBlur={(e) => {
-                            if (ri === 0 && !e.target.value) e.target.placeholder = `Header ${ci + 1}`;
-                          }}
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TableBlock block={block} onUpdate={(content) => handleBlockContentChange(block.id, content)} />
         ) : block.type === 'video' ? (
           <div className="w-full">
             {block.content ? (
@@ -783,13 +807,18 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
             )}
           </div>
         ) : block.type === 'math' ? (
-          <div className="w-full p-4 bg-gray-50 rounded font-mono text-lg">
+          <div className="w-full p-4 bg-gray-50 rounded">
             {block.content ? (
-              <div>{block.content}</div>
+              <div 
+                className="text-lg overflow-x-auto"
+                dangerouslySetInnerHTML={{ 
+                  __html: tryRenderLatex(block.content) 
+                }}
+              />
             ) : (
               <input
                 type="text"
-                placeholder="LaTeX equation"
+                placeholder="LaTeX equation (e.g. x^2 + y^2 = r^2)"
                 className="w-full outline-none bg-transparent font-mono"
                 onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
               />
@@ -812,6 +841,19 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
                 type="text"
                 placeholder="Paste URL to bookmark"
                 className="w-full px-3 py-2"
+                onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
+              />
+            )}
+          </div>
+        ) : block.type === 'embed' ? (
+          <div className="w-full">
+            {block.content ? (
+              <EmbedBlock url={block.content} />
+            ) : (
+              <input
+                type="text"
+                placeholder="Paste URL to embed (YouTube, Twitter, Figma, etc.)"
+                className="w-full px-3 py-2 border border-border rounded"
                 onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
               />
             )}
@@ -917,6 +959,18 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
         />
       )}
 
+      {page && page.parent_id && (
+        <Breadcrumb 
+          pageId={page.id} 
+          workspaceId={page.workspace_id}
+          onNavigate={(id) => {
+            if (id !== page.workspace_id && _onNavigate) {
+              _onNavigate(id);
+            }
+          }}
+        />
+      )}
+
       {showCoverInput && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-white rounded-lg shadow-lg p-4">
           <input
@@ -984,6 +1038,20 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
             📄 Text
           </span>
 
+          {todoProgress && (
+            <div className="flex items-center gap-2">
+              <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-green-500 rounded-full transition-all"
+                  style={{ width: `${todoProgress.percentage}%` }}
+                />
+              </div>
+              <span className="text-xs text-text-secondary">
+                {todoProgress.completed}/{todoProgress.total} ({todoProgress.percentage}%)
+              </span>
+            </div>
+          )}
+
           <span className="text-xs">
             {wordCount} words · {readingTime} min read
           </span>
@@ -1047,7 +1115,15 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
         onMouseUp={handleTextSelection}
         onKeyUp={handleTextSelection}
       >
-        {blocks.map((block, index) => renderBlock(block, index))}
+        {blocks.length === 0 || (blocks.length === 1 && blocks[0].content === '') ? (
+          <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
+            <div className="text-6xl mb-4">✏️</div>
+            <p className="text-lg font-medium mb-2">Начните печатать...</p>
+            <p className="text-sm">Нажмите <kbd className="px-1.5 py-0.5 bg-surface border border-border rounded text-xs">/</kbd> для списка команд</p>
+          </div>
+        ) : (
+          blocks.map((block, index) => renderBlock(block, index))
+        )}
       </div>
 
       {contextMenu && (
@@ -1093,7 +1169,11 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
               />
             ))}
           </div>
-        </div>
+          </div>
+        )}
+
+      {showShortcuts && (
+        <ShortcutHelpModal onClose={() => setShowShortcuts(false)} />
       )}
     </div>
   );

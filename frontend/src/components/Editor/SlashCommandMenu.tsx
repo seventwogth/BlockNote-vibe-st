@@ -34,6 +34,7 @@ const commands: Command[] = [
   { label: 'Audio', description: 'Embed an audio file', icon: '🎵', command: 'audio', category: 'Media' },
   { label: 'Math', description: 'LaTeX math equation', icon: '∑', command: 'math', category: 'Advanced' },
   { label: 'Bookmark', description: 'Save a link as a bookmark', icon: '🔖', command: 'bookmark', category: 'Advanced' },
+  { label: 'Embed', description: 'Embed content (YouTube, Twitter, Figma)', icon: '📐', command: 'embed', category: 'Media' },
 ];
 
 const categories = ['Basic', 'Lists', 'Media', 'Advanced'];
