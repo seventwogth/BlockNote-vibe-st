@@ -57,6 +57,7 @@ func main() {
 	workspaceHandler := handler.NewWorkspaceHandler(workspaceUseCase)
 	pageHandler := handler.NewPageHandler(pageUseCase)
 	assetHandler := handler.NewAssetHandler(assetUseCase)
+	linkHandler := handler.NewLinkHandler(usecase.NewLinkUseCase())
 
 	hub := handler.NewHub()
 	go hub.Run()
@@ -198,6 +199,8 @@ func main() {
 	mux.HandleFunc("/api/assets/", func(w http.ResponseWriter, r *http.Request) {
 		authMiddleware.Handler(http.HandlerFunc(assetHandler.GetDownloadURL)).ServeHTTP(w, r)
 	})
+
+	mux.HandleFunc("/api/links/preview", linkHandler.Preview)
 
 	mux.HandleFunc("/api/ws/pages/", wsHandler.Handle)
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { PageWithContent } from '../../types';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useS3Upload } from '../../hooks/useS3Upload';
@@ -7,41 +7,85 @@ import { ContextMenu } from './ContextMenu';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { FloatingToolbar } from './FloatingToolbar';
 import { ImageBlock } from './ImageBlock';
-import { Breadcrumb } from '../Breadcrumb';
+import { LinkPreview } from './LinkPreview';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
   onSaveContent: (content: Uint8Array) => void;
-  onUpdatePage: (data: { title?: string; icon?: string }) => void;
+  onUpdatePage: (data: { title?: string; icon?: string; cover?: string }) => void;
   onNavigate?: (pageId: string) => void;
 }
 
-type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image';
+type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image' | 'table' | 'video' | 'audio' | 'math' | 'toggle' | 'bookmark';
 
-export interface Block {
+interface Block {
   id: string;
   type: BlockType;
   content: string;
   properties?: Record<string, unknown>;
+  children?: Block[];
+  collapsed?: boolean;
+  color?: string;
+  backgroundColor?: string;
 }
 
-export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: BlockEditorProps) {
+const EMOJI_LIST = ['📄', '📝', '📚', '💡', '⭐', '🔥', '🎯', '💻', '🎨', '🎮', '🎵', '📷', '🌟', '✨', '💫', '🎉', '🚀', '💼', '🏠', '🌍', '📖', '🔖', '📌', '🎲', '🧩', '📊', '📈', '💰', '❤️', '👍', '👀', '🎁'];
+
+interface BlockColor {
+  name: string;
+  bg: string;
+  text: string;
+}
+
+const BLOCK_COLORS: BlockColor[] = [
+  { name: 'Default', bg: 'transparent', text: 'inherit' },
+  { name: 'Gray', bg: '#f4f4f5', text: '#71717a' },
+  { name: 'Brown', bg: '#faf5f0', text: '#92400e' },
+  { name: 'Orange', bg: '#fff7ed', text: '#c2410c' },
+  { name: 'Yellow', bg: '#fefce8', text: '#a16207' },
+  { name: 'Green', bg: '#f0fdf4', text: '#15803d' },
+  { name: 'Blue', bg: '#eff6ff', text: '#2563eb' },
+  { name: 'Purple', bg: '#faf5ff', text: '#9333ea' },
+  { name: 'Pink', bg: '#fdf2f8', text: '#db2777' },
+  { name: 'Red', bg: '#fef2f2', text: '#dc2626' },
+];
+
+export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _onNavigate }: BlockEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const [title, setTitle] = useState('');
+  const [cover, setCover] = useState<string | null>(null);
+  const [icon, setIcon] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([{ id: '1', type: 'text', content: '' }]);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; blockId?: string } | null>(null);
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; blockId: string } | null>(null);
   const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showCoverInput, setShowCoverInput] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const lastSavedContentRef = useRef<string>('');
   const isUpdatingRef = useRef(false);
   
   const { uploading } = useS3Upload();
 
+  const wordCount = useMemo(() => {
+    const text = blocks.map(b => b.content.replace(/<[^>]*>/g, '')).join(' ');
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+    return words.length;
+  }, [blocks]);
+
+  const readingTime = useMemo(() => {
+    return Math.max(1, Math.ceil(wordCount / 200));
+  }, [wordCount]);
+
   useEffect(() => {
     if (!page) return;
     
     setTitle(page.title);
+    setCover((page as any).cover || null);
+    setIcon(page.icon || null);
     
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
@@ -147,6 +191,10 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
         e.preventDefault();
         redo();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setFocusMode(f => !f);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -185,7 +233,6 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
         return parsed;
       }
     } catch {
-      // Plain text fallback
     }
     
     return content.split('\n').filter(line => line.trim()).map((line, idx) => ({
@@ -246,14 +293,25 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
   }, [pushToHistory]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
-    setTitle(newTitle);
+    setTitle(e.target.value);
   };
 
   const handleTitleBlur = () => {
     if (page && title !== page.title) {
-      onUpdatePage({ title });
+      onUpdatePage({ title, icon: icon || undefined, cover: cover || undefined });
     }
+  };
+
+  const handleIconChange = (newIcon: string) => {
+    setIcon(newIcon);
+    setShowEmojiPicker(false);
+    onUpdatePage({ title, icon: newIcon, cover: cover || undefined });
+  };
+
+  const handleCoverChange = (url: string) => {
+    setCover(url);
+    setShowCoverInput(false);
+    onUpdatePage({ title, icon: icon || undefined, cover: url });
   };
 
   const handleBlockContentChange = useCallback((blockId: string, newContent: string, cursorPosition?: number) => {
@@ -283,7 +341,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
             range.collapse(true);
             sel?.removeAllRanges();
             sel?.addRange(range);
-          } catch (e) {          }
+          } catch (e) { }
         }
       }, 0);
     }
@@ -292,10 +350,10 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
   const handleKeyDown = useCallback((e: React.KeyboardEvent, blockId: string) => {
     const blockIndex = blocks.findIndex(b => b.id === blockId);
     const isEmptyBlock = stripHtml(blocks[blockIndex]?.content || '').trim() === '';
+    const currentBlock = blocks[blockIndex];
     
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      const currentBlock = blocks[blockIndex];
       const newBlock: Block = { 
         id: `${Date.now()}`, 
         type: currentBlock.type, 
@@ -331,7 +389,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
         }
       }, 0);
     }
-    
+
     if (e.key === 'ArrowUp' && blockIndex > 0) {
       const selection = window.getSelection();
       if (selection && selection.anchorOffset === 0) {
@@ -370,7 +428,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
       }
     }
 
-    if (e.key === '/') {
+    if (e.key === '/' && isEmptyBlock) {
       const blockEl = document.getElementById(`block-${blockId}`);
       if (blockEl) {
         const selection = window.getSelection();
@@ -383,11 +441,19 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
         }
       }
     }
+
+    if (e.key === 'Tab' && currentBlock.type === 'toggle') {
+      e.preventDefault();
+      const newBlocks = blocks.map(b => 
+        b.id === blockId ? { ...b, collapsed: !b.collapsed } : b
+      );
+      updateBlocks(newBlocks);
+    }
   }, [blocks, updateBlocks]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, blockId?: string) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setContextMenu({ x: e.clientX, y: e.clientY, blockId });
   }, []);
 
   const handleTextSelection = useCallback(() => {
@@ -438,10 +504,28 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
       case 'divider': newType = 'divider'; break;
       case 'callout': newType = 'callout'; break;
       case 'image': newType = 'image'; break;
+      case 'table': newType = 'table'; break;
+      case 'video': newType = 'video'; break;
+      case 'audio': newType = 'audio'; break;
+      case 'math': newType = 'math'; break;
+      case 'toggle': newType = 'toggle'; break;
+      case 'bookmark': newType = 'bookmark'; break;
+      default: newType = 'text';
+    }
+
+    let newBlock: Block;
+    if (newType === 'table') {
+      newBlock = { id: `${Date.now()}`, type: 'table', content: '3x3', children: [] };
+    } else if (newType === 'toggle') {
+      newBlock = { id: `${Date.now()}`, type: 'toggle', content: cleanContent || 'Toggle', children: [{ id: `${Date.now()}-child`, type: 'text', content: '' }], collapsed: false };
+    } else if (newType === 'video' || newType === 'audio' || newType === 'bookmark' || newType === 'math') {
+      newBlock = { id: `${Date.now()}`, type: newType, content: '' };
+    } else {
+      newBlock = { ...currentBlock, type: newType, content: cleanContent };
     }
     
     const newBlocks = [...blocks];
-    newBlocks[blockIndex] = { ...currentBlock, type: newType, content: cleanContent };
+    newBlocks[blockIndex] = newBlock;
     updateBlocks(newBlocks);
     setSlashMenu(null);
     
@@ -450,57 +534,35 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
   }, [slashMenu, blocks, updateBlocks]);
 
   const handleContextAction = useCallback((action: string) => {
-    const selection = window.getSelection();
-    if (!selection) return;
+    const blockId = contextMenu?.blockId;
     
-    const selectedText = selection.toString();
-    const selectedBlocks = blocks.filter(b => 
-      document.getElementById(`block-${b.id}`)?.contains(selection.anchorNode)
-    );
-    
-    switch (action) {
-      case 'delete':
-        if (selectedBlocks.length > 0) {
-          const newBlocks = blocks.filter(b => !selectedBlocks.includes(b));
-          updateBlocks(newBlocks.length > 0 ? newBlocks : [{ id: '1', type: 'text', content: '' }]);
-        }
-        break;
-      case 'duplicate':
-        if (selectedBlocks.length > 0) {
-          const insertIndex = blocks.indexOf(selectedBlocks[selectedBlocks.length - 1]);
-          const newBlocks = [...blocks];
-          const duplicates = selectedBlocks.map(b => ({ ...b, id: `${Date.now()}-${Math.random()}` }));
-          newBlocks.splice(insertIndex + 1, 0, ...duplicates);
-          updateBlocks(newBlocks);
-        }
-        break;
-      case 'copy':
-        navigator.clipboard.writeText(selectedText);
-        break;
-      case 'paste':
-        navigator.clipboard.readText().then(text => {
-          const newBlocks = [...blocks];
-          selectedBlocks.forEach((b) => {
-            const idx = newBlocks.indexOf(b);
-            newBlocks[idx] = { ...b, content: b.content + text };
-          });
-          updateBlocks(newBlocks);
-        });
-        break;
-      case 'turnInto-text': case 'turnInto-heading1': case 'turnInto-heading2':
-      case 'turnInto-heading3': case 'turnInto-bullet': case 'turnInto-numbered':
-      case 'turnInto-quote': case 'turnInto-code':
-        const newType = action.replace('turnInto-', '') as BlockType;
-        const newBlocks = selectedBlocks.map(b => ({ ...b, type: newType }));
-        updateBlocks(blocks.map(b => {
-          const updated = newBlocks.find(nb => nb.id === b.id);
-          return updated || b;
-        }));
-        break;
+    if (action === 'delete' && blockId) {
+      const newBlocks = blocks.filter(b => b.id !== blockId);
+      updateBlocks(newBlocks.length > 0 ? newBlocks : [{ id: '1', type: 'text', content: '' }]);
+    } else if (action === 'duplicate' && blockId) {
+      const blockIndex = blocks.findIndex(b => b.id === blockId);
+      const currentBlock = blocks[blockIndex];
+      const newBlock = { ...currentBlock, id: `${Date.now()}-${Math.random()}` };
+      const newBlocks = [...blocks];
+      newBlocks.splice(blockIndex + 1, 0, newBlock);
+      updateBlocks(newBlocks);
+    } else if (action.startsWith('turnInto-') && blockId) {
+      const newType = action.replace('turnInto-', '') as BlockType;
+      const newBlocks = blocks.map(b => b.id === blockId ? { ...b, type: newType } : b);
+      updateBlocks(newBlocks);
+    } else if (action.startsWith('color-') && blockId) {
+      const colorName = action.replace('color-', '');
+      const color = BLOCK_COLORS.find(c => c.name.toLowerCase() === colorName.toLowerCase());
+      const newBlocks = blocks.map(b => b.id === blockId ? { ...b, color: color?.text, backgroundColor: color?.bg } : b);
+      updateBlocks(newBlocks);
+      setShowColorPicker(null);
+    } else if (action === 'toggle' && blockId) {
+      const newBlocks = blocks.map(b => b.id === blockId ? { ...b, collapsed: !b.collapsed } : b);
+      updateBlocks(newBlocks);
     }
     
     setContextMenu(null);
-  }, [blocks, updateBlocks]);
+  }, [contextMenu, blocks, updateBlocks]);
 
   const applyFormat = useCallback((format: string) => {
     const selection = window.getSelection();
@@ -554,6 +616,33 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, blockId: string) => {
+    setDraggedBlockId(blockId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetBlockId: string) => {
+    e.preventDefault();
+    if (!draggedBlockId || draggedBlockId === targetBlockId) return;
+
+    const draggedIndex = blocks.findIndex(b => b.id === draggedBlockId);
+    const targetIndex = blocks.findIndex(b => b.id === targetBlockId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newBlocks = [...blocks];
+    const [draggedBlock] = newBlocks.splice(draggedIndex, 1);
+    newBlocks.splice(targetIndex, 0, draggedBlock);
+    
+    updateBlocks(newBlocks);
+    setDraggedBlockId(null);
+  };
+
   const getBlockPlaceholder = (type: BlockType): string => {
     switch (type) {
       case 'heading1': return 'Heading 1';
@@ -566,8 +655,257 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
       case 'code': return 'Code';
       case 'callout': return 'Callout';
       case 'image': return 'Click to upload image';
+      case 'table': return 'Table';
+      case 'video': return 'Paste YouTube URL';
+      case 'audio': return 'Paste audio URL';
+      case 'math': return 'LaTeX equation (e.g. x^2 + y^2 = r^2)';
+      case 'toggle': return 'Toggle';
+      case 'bookmark': return 'Paste URL to bookmark';
       default: return "Type '/' for commands...";
     }
+  };
+
+  const renderBlock = (block: Block, _index: number) => {
+    const isToggleCollapsed = block.type === 'toggle' && block.collapsed;
+    
+    const blockStyles = (block.backgroundColor || block.color) ? {
+      backgroundColor: block.backgroundColor,
+      color: block.color,
+      padding: '8px 12px',
+      borderRadius: '4px',
+    } : {};
+
+    return (
+      <div
+        key={block.id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, block.id)}
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, block.id)}
+        className={`group flex items-start gap-2 mb-2 ${draggedBlockId === block.id ? 'opacity-50' : ''}`}
+      >
+        <div 
+          className="w-6 h-6 flex items-center justify-center text-text-secondary opacity-0 group-hover:opacity-50 text-xs cursor-grab mt-1"
+          title="Drag to move"
+        >
+          ⋮⋮
+        </div>
+
+        {block.type === 'toggle' && (
+          <button
+            onClick={() => {
+              const newBlocks = blocks.map(b => b.id === block.id ? { ...b, collapsed: !b.collapsed } : b);
+              updateBlocks(newBlocks);
+            }}
+            className="mt-1 text-text-secondary"
+          >
+            {block.collapsed ? '▶' : '▼'}
+          </button>
+        )}
+
+        {block.type === 'todo' && (
+          <input
+            type="checkbox"
+            className="mt-1.5 w-4 h-4"
+            checked={block.content.includes('checked')}
+            onChange={(e) => {
+              const newContent = e.target.checked ? 'checked' : '';
+              const newBlocks = blocks.map(b => b.id === block.id ? { ...b, content: newContent } : b);
+              updateBlocks(newBlocks);
+            }}
+          />
+        )}
+
+        {block.type === 'divider' ? (
+          <hr className="w-full border-t border-gray-200 my-4" />
+        ) : block.type === 'image' ? (
+          <ImageBlock
+            block={block}
+            onUpdate={(content) => handleBlockContentChange(block.id, content)}
+            workspaceId={page?.workspace_id || ''}
+            pageId={page?.id || ''}
+          />
+        ) : block.type === 'table' ? (
+          <div className="w-full overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-200">
+              <tbody>
+                {[0, 1, 2].map((_row, ri) => (
+                  <tr key={ri}>
+                    {[0, 1, 2].map((_col, ci) => (
+                      <td key={ci} className="border border-gray-200 p-2">
+                        <input
+                          className="w-full outline-none bg-transparent"
+                          placeholder={ri === 0 ? `Header ${ci + 1}` : ''}
+                          onFocus={(e) => {
+                            if (ri === 0) e.target.placeholder = '';
+                          }}
+                          onBlur={(e) => {
+                            if (ri === 0 && !e.target.value) e.target.placeholder = `Header ${ci + 1}`;
+                          }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : block.type === 'video' ? (
+          <div className="w-full">
+            {block.content ? (
+              <iframe
+                width="100%"
+                height="315"
+                src={block.content.replace('watch?v=', 'embed/')}
+                frameBorder="0"
+                allowFullScreen
+                className="rounded"
+              />
+            ) : (
+              <input
+                type="text"
+                placeholder="Paste YouTube URL"
+                className="w-full px-3 py-2 border border-border rounded"
+                onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
+              />
+            )}
+          </div>
+        ) : block.type === 'audio' ? (
+          <div className="w-full">
+            {block.content ? (
+              <audio controls src={block.content} className="w-full" />
+            ) : (
+              <input
+                type="text"
+                placeholder="Paste audio URL"
+                className="w-full px-3 py-2 border border-border rounded"
+                onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
+              />
+            )}
+          </div>
+        ) : block.type === 'math' ? (
+          <div className="w-full p-4 bg-gray-50 rounded font-mono text-lg">
+            {block.content ? (
+              <div>{block.content}</div>
+            ) : (
+              <input
+                type="text"
+                placeholder="LaTeX equation"
+                className="w-full outline-none bg-transparent font-mono"
+                onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
+              />
+            )}
+          </div>
+        ) : block.type === 'bookmark' ? (
+          <div className="w-full border border-border rounded overflow-hidden">
+            {block.content ? (
+              <a href={block.content} target="_blank" rel="noopener noreferrer" className="flex hover:bg-hover">
+                <div className="w-32 h-24 bg-gray-100 flex items-center justify-center text-4xl">
+                  🔖
+                </div>
+                <div className="p-3">
+                  <div className="font-medium">{new URL(block.content).hostname}</div>
+                  <div className="text-sm text-text-secondary truncate">{block.content}</div>
+                </div>
+              </a>
+            ) : (
+              <input
+                type="text"
+                placeholder="Paste URL to bookmark"
+                className="w-full px-3 py-2"
+                onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
+              />
+            )}
+          </div>
+        ) : block.type === 'callout' ? (
+          <div className="w-full bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex items-start gap-3">
+            <span className="text-2xl">💡</span>
+            <div
+              id={`block-${block.id}`}
+              contentEditable
+              data-placeholder={getBlockPlaceholder(block.type)}
+              className="flex-1 outline-none min-h-[1.5em]"
+              onInput={(e) => {
+                const sel = window.getSelection();
+                const cursorPos = sel?.anchorOffset;
+                handleBlockContentChange(block.id, e.currentTarget.innerHTML, cursorPos);
+              }}
+              onKeyDown={(e) => handleKeyDown(e, block.id)}
+              dangerouslySetInnerHTML={{ __html: renderBlockContent(block) }}
+              suppressContentEditableWarning
+            />
+          </div>
+        ) : (
+          <div className="flex-1" style={blockStyles}>
+            {block.type === 'toggle' && !isToggleCollapsed && block.children ? (
+              <div className="pl-4 border-l-2 border-gray-200">
+                {block.children.map((child, ci) => (
+                  <div key={child.id}>
+                    <div
+                      id={`block-${child.id}`}
+                      contentEditable
+                      data-placeholder="Type something..."
+                      className="outline-none min-h-[1.5em]"
+                      onInput={(e) => {
+                        const newBlocks = blocks.map(b => {
+                          if (b.id === block.id) {
+                            return {
+                              ...b,
+                              children: b.children?.map((c, i) => i === ci ? { ...c, content: e.currentTarget.innerHTML } : c)
+                            };
+                          }
+                          return b;
+                        });
+                        setBlocks(newBlocks);
+                      }}
+                      onKeyDown={(e) => handleKeyDown(e, child.id)}
+                      dangerouslySetInnerHTML={{ __html: child.content }}
+                      suppressContentEditableWarning
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                id={`block-${block.id}`}
+                contentEditable
+                data-placeholder={getBlockPlaceholder(block.type)}
+                className={`outline-none min-h-[1.5em] ${
+                  block.type === 'heading1' ? 'text-3xl font-bold mb-4 mt-2' :
+                  block.type === 'heading2' ? 'text-2xl font-semibold mb-3 mt-1' :
+                  block.type === 'heading3' ? 'text-xl font-medium mb-2' :
+                  block.type === 'bullet' ? 'pl-2 list-disc' :
+                  block.type === 'numbered' ? 'pl-2 list-decimal' :
+                  block.type === 'quote' ? 'border-l-4 border-gray-300 pl-4 italic text-gray-600' :
+                  block.type === 'code' ? 'font-mono bg-gray-100 p-2 rounded text-sm' :
+                  ''
+                }`}
+                onInput={(e) => {
+                  const sel = window.getSelection();
+                  const cursorPos = sel?.anchorOffset;
+                  handleBlockContentChange(block.id, e.currentTarget.innerHTML, cursorPos);
+                }}
+                onKeyDown={(e) => handleKeyDown(e, block.id)}
+                onContextMenu={(e) => handleContextMenu(e, block.id)}
+                dangerouslySetInnerHTML={{ __html: renderBlockContent(block) }}
+                suppressContentEditableWarning
+              />
+            )}
+          </div>
+        ) : (
+          <div className="flex-1" style={blockStyles}>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setContextMenu({ x: e.clientX, y: e.clientY, blockId: block.id });
+          }}
+          className="opacity-0 group-hover:opacity-50 mt-1"
+        >
+          ⋯
+        </button>
+      </div>
+    );
   };
 
   if (!page) {
@@ -579,19 +917,65 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
   }
 
   return (
-    <div className="flex flex-col h-full" onClick={() => { setContextMenu(null); setSlashMenu(null); }}>
-      {page && onNavigate && (
-        <Breadcrumb
-          pageId={page.id}
-          workspaceId={page.workspace_id}
-          onNavigate={onNavigate}
+    <div 
+      className={`flex flex-col h-full ${focusMode ? 'max-w-3xl mx-auto' : ''}`} 
+      onClick={() => { setContextMenu(null); setSlashMenu(null); setShowEmojiPicker(false); setShowCoverInput(false); }}
+    >
+      {cover && (
+        <div 
+          className="h-48 bg-cover bg-center cursor-pointer"
+          style={{ backgroundImage: `url(${cover})` }}
+          onClick={() => setShowCoverInput(true)}
         />
       )}
-      <div className="px-12 py-8">
-        <div className="flex items-center gap-2 mb-4">
-          <button className="text-3xl hover:bg-hover p-1 rounded">
-            {page.icon || '📄'}
+
+      {showCoverInput && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-white rounded-lg shadow-lg p-4">
+          <input
+            type="text"
+            placeholder="Paste image URL for cover"
+            className="w-64 px-3 py-2 border border-border rounded"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCoverChange(e.currentTarget.value);
+              if (e.key === 'Escape') setShowCoverInput(false);
+            }}
+          />
+          <button
+            onClick={() => {
+              const input = document.querySelector('input[placeholder*="cover"]') as HTMLInputElement;
+              if (input?.value) handleCoverChange(input.value);
+            }}
+            className="ml-2 px-3 py-2 bg-primary text-white rounded"
+          >
+            Add
           </button>
+        </div>
+      )}
+
+      <div className="px-12 py-8">
+        <div className="flex items-start gap-2 mb-4">
+          <div className="relative">
+            <button 
+              className="text-3xl hover:bg-hover p-1 rounded"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            >
+              {icon || '📄'}
+            </button>
+            {showEmojiPicker && (
+              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-border p-2 z-50 grid grid-cols-6 gap-1">
+                {EMOJI_LIST.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => handleIconChange(emoji)}
+                    className="p-1 hover:bg-hover rounded text-xl"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <input
             type="text"
             value={title}
@@ -601,8 +985,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
             className="text-3xl font-semibold bg-transparent border-none outline-none text-text-primary w-full"
           />
         </div>
-        
-        <div className="flex items-center gap-4 mb-4 text-sm text-text-secondary">
+
+        <div className="flex items-center gap-4 mb-4 text-sm text-text-secondary flex-wrap">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
             {connected ? 'Connected' : 'Disconnected'}
@@ -611,6 +995,26 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
           <span className="px-2 py-1 bg-surface rounded text-xs">
             📄 Text
           </span>
+
+          <span className="text-xs">
+            {wordCount} words · {readingTime} min read
+          </span>
+
+          <button
+            onClick={() => setShowCoverInput(true)}
+            className="px-2 py-1 hover:bg-hover rounded text-xs"
+            title="Add cover"
+          >
+            🖼️ Cover
+          </button>
+
+          <button
+            onClick={() => setFocusMode(!focusMode)}
+            className={`px-2 py-1 rounded text-xs ${focusMode ? 'bg-primary text-white' : 'hover:bg-hover'}`}
+            title="Focus mode (Ctrl+/)"
+          >
+            🎯 Focus
+          </button>
 
           <div className="flex items-center gap-1">
             <button
@@ -651,54 +1055,11 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
       <div 
         ref={editorRef}
         className="flex-1 overflow-y-auto px-12 py-4 outline-none"
-        onContextMenu={handleContextMenu}
+        onContextMenu={(e) => handleContextMenu(e)}
         onMouseUp={handleTextSelection}
         onKeyUp={handleTextSelection}
       >
-        {blocks.map((block) => (
-          <div key={block.id} className="group flex items-start gap-2 mb-2">
-            <div className="w-6 h-6 flex items-center justify-center text-text-secondary opacity-0 group-hover:opacity-50 text-xs cursor-grab mt-1">
-              ⋮⋮
-            </div>
-            {block.type === 'image' ? (
-              <ImageBlock
-                block={block}
-                onUpdate={(content) => handleBlockContentChange(block.id, content)}
-                workspaceId={page.workspace_id}
-                pageId={page.id}
-              />
-            ) : (
-              <>
-            <div
-              id={`block-${block.id}`}
-              contentEditable
-              data-placeholder={getBlockPlaceholder(block.type as BlockType)}
-              className={`flex-1 outline-none min-h-[1.5em] ${
-                (block.type as BlockType) === 'heading1' ? 'text-3xl font-bold mb-4 mt-2' :
-                (block.type as BlockType) === 'heading2' ? 'text-2xl font-semibold mb-3 mt-1' :
-                (block.type as BlockType) === 'heading3' ? 'text-xl font-medium mb-2' :
-                (block.type as BlockType) === 'bullet' ? 'pl-2' :
-                (block.type as BlockType) === 'numbered' ? 'pl-2' :
-                (block.type as BlockType) === 'todo' ? 'flex items-center gap-2' :
-                (block.type as BlockType) === 'quote' ? 'border-l-4 border-gray-300 pl-4 italic text-gray-600' :
-                (block.type as BlockType) === 'code' ? 'font-mono bg-gray-100 p-2 rounded text-sm' :
-                (block.type as BlockType) === 'divider' ? 'border-t border-gray-200 my-4' :
-                (block.type as BlockType) === 'callout' ? 'bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex items-start gap-3' :
-                ''
-              }`}
-              onInput={(e) => {
-                const sel = window.getSelection();
-                const cursorPos = sel?.anchorOffset;
-                handleBlockContentChange(block.id, e.currentTarget.innerHTML, cursorPos);
-              }}
-              onKeyDown={(e) => handleKeyDown(e, block.id)}
-              dangerouslySetInnerHTML={{ __html: renderBlockContent(block) }}
-              suppressContentEditableWarning
-            />
-              </>
-            )}
-          </div>
-        ))}
+        {blocks.map((block, index) => renderBlock(block, index))}
       </div>
 
       {contextMenu && (
@@ -726,6 +1087,25 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate }: B
           onFormat={applyFormat}
           onClose={() => setFloatingToolbar(null)}
         />
+      )}
+
+      {showColorPicker && (
+        <div 
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-border p-2"
+          style={{ left: contextMenu?.x, top: (contextMenu?.y || 0) + 150 }}
+        >
+          <div className="grid grid-cols-5 gap-1">
+            {BLOCK_COLORS.map((color, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleContextAction(`color-${color.name.toLowerCase()}`)}
+                className="w-8 h-8 rounded border border-border"
+                style={{ backgroundColor: color.bg }}
+                title={color.name}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
