@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { useS3Upload } from '../../hooks/useS3Upload';
 
 interface Block {
@@ -66,7 +66,7 @@ export function ImageBlock({ block, onUpdate, workspaceId, pageId }: ImageBlockP
     setDragOver(false);
   };
 
-  const handleResizeStart = (e: React.MouseEvent, direction: string) => {
+  const handleResizeStart = (e: React.MouseEvent, _direction: string) => {
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);

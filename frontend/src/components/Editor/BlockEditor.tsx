@@ -7,7 +7,6 @@ import { ContextMenu } from './ContextMenu';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { FloatingToolbar } from './FloatingToolbar';
 import { ImageBlock } from './ImageBlock';
-import { LinkPreview } from './LinkPreview';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
@@ -892,18 +891,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
               />
             )}
           </div>
-        ) : (
-          <div className="flex-1" style={blockStyles}>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setContextMenu({ x: e.clientX, y: e.clientY, blockId: block.id });
-          }}
-          className="opacity-0 group-hover:opacity-50 mt-1"
-        >
-          ⋯
-        </button>
+        )}
       </div>
     );
   };
