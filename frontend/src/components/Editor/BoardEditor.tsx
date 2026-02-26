@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { PageWithContent } from '../../types';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -10,7 +10,7 @@ interface BoardEditorProps {
   onUpdatePage: (data: { title?: string; icon?: string }) => void;
 }
 
-type Tool = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'text' | 'sticky' | 'pencil' | 'eraser' | 'line' | 'star' | 'heart' | 'polygon' | 'image' | 'connector';
+type Tool = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'text' | 'sticky' | 'pencil' | 'eraser' | 'line' | 'star' | 'heart' | 'polygon' | 'image' | 'connector' | 'lasso' | 'rotate';
 
 interface BoardElement {
   id: string;
@@ -71,6 +71,8 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
   const [isPanning, setIsPanning] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isLassoing, setIsLassoing] = useState(false);
+  const [lassoPoints, setLassoPoints] = useState<{ x: number; y: number }[]>([]);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [elementStart, setElementStart] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -84,10 +86,12 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
   const [showTextToolbar, setShowTextToolbar] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [snapToGrid, setSnapToGrid] = useState(true);
+  const [showGuides, setShowGuides] = useState(true);
   const [gridSize] = useState(20);
   const [laserMode, setLaserMode] = useState(false);
   const [laserPoints, setLaserPoints] = useState<{ x: number; y: number; color: string }[]>([]);
   const [clipboard, setClipboard] = useState<BoardElement[]>([]);
+  const [guides, setGuides] = useState<{ x?: number; y?: number }[]>([]);
   
   const [toolOptions] = useState<ToolOptions>({
     strokeWidth: 2,
@@ -267,6 +271,46 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     return Math.round(value / gridSize) * gridSize;
   };
 
+  const calculateGuides = useCallback((elements: BoardElement[], selectedIds: string[], newPos: { x: number; y: number }) => {
+    if (!showGuides) return [];
+    
+    const selected = elements.filter(el => selectedIds.includes(el.id));
+    if (selected.length === 0) return [];
+
+    const newGuides: { x?: number; y?: number }[] = [];
+    const allElements = elements.filter(el => !selectedIds.includes(el.id));
+
+    const centerX = newPos.x + (selected[0].width || 0) / 2;
+    const centerY = newPos.y + (selected[0].height || 0) / 2;
+
+    for (const el of allElements) {
+      const elCenterX = el.x + (el.width || 0) / 2;
+      const elCenterY = el.y + (el.height || 0) / 2;
+
+      if (Math.abs(newPos.x - el.x) < 5) {
+        newGuides.push({ x: el.x });
+      }
+      if (Math.abs((newPos.x + (selected[0].width || 0)) - (el.x + (el.width || 0))) < 5) {
+        newGuides.push({ x: el.x + (el.width || 0) });
+      }
+      if (Math.abs(centerX - elCenterX) < 5) {
+        newGuides.push({ x: elCenterX });
+      }
+
+      if (Math.abs(newPos.y - el.y) < 5) {
+        newGuides.push({ y: el.y });
+      }
+      if (Math.abs((newPos.y + (selected[0].height || 0)) - (el.y + (el.height || 0))) < 5) {
+        newGuides.push({ y: el.y + (el.height || 0) });
+      }
+      if (Math.abs(centerY - elCenterY) < 5) {
+        newGuides.push({ y: elCenterY });
+      }
+    }
+
+    return newGuides;
+  }, [showGuides]);
+
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -309,6 +353,28 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
       }
     }
 
+    if (showGuides && guides.length > 0) {
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 1 / scale;
+      ctx.setLineDash([4 / scale, 4 / scale]);
+      
+      for (const guide of guides) {
+        if (guide.x !== undefined) {
+          ctx.beginPath();
+          ctx.moveTo(guide.x, -10000);
+          ctx.lineTo(guide.x, 10000);
+          ctx.stroke();
+        }
+        if (guide.y !== undefined) {
+          ctx.beginPath();
+          ctx.moveTo(-10000, guide.y);
+          ctx.lineTo(10000, guide.y);
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+    }
+
     boardState.elements.forEach(el => {
       const isSelected = boardState.selectedIds.includes(el.id);
       const opacity = el.opacity ?? 1;
@@ -317,6 +383,13 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
       ctx.fillStyle = el.color;
       ctx.strokeStyle = isSelected ? '#3b82f6' : '#00000020';
       ctx.lineWidth = (isSelected ? 3 : toolOptions.strokeWidth) / scale;
+
+      if (el.rotation) {
+        ctx.save();
+        ctx.translate(el.x + (el.width || 0) / 2, el.y + (el.height || 0) / 2);
+        ctx.rotate((el.rotation * Math.PI) / 180);
+        ctx.translate(-(el.x + (el.width || 0) / 2), -(el.y + (el.height || 0) / 2));
+      }
 
       switch (el.type) {
         case 'rectangle':
@@ -512,6 +585,10 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           break;
       }
 
+      if (el.rotation) {
+        ctx.restore();
+      }
+
       ctx.globalAlpha = 1;
 
       if (isSelected && !el.locked) {
@@ -531,6 +608,9 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           { x: el.x - handleSize / 2, y: el.y + el.height - handleSize / 2, cursor: 'sw-resize', pos: 'sw' },
           { x: el.x - handleSize / 2, y: el.y + el.height / 2 - handleSize / 2, cursor: 'w-resize', pos: 'w' },
         ];
+        
+        const rotateHandle = { x: el.x + el.width / 2, y: el.y - 20 / scale, cursor: 'grab', pos: 'rotate' };
+        
         handles.forEach(h => {
           ctx.fillStyle = '#ffffff';
           ctx.strokeStyle = '#3b82f6';
@@ -539,6 +619,24 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           ctx.fillRect(h.x, h.y, handleSize, handleSize);
           ctx.strokeRect(h.x, h.y, handleSize, handleSize);
         });
+
+        ctx.beginPath();
+        ctx.moveTo(rotateHandle.x, rotateHandle.y);
+        ctx.lineTo(el.x + el.width / 2, el.y);
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 1 / scale;
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(rotateHandle.x, rotateHandle.y, 6 / scale, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#3b82f6';
+        ctx.font = `${10 / scale}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('↻', rotateHandle.x, rotateHandle.y + 4 / scale);
       }
 
       if (el.locked) {
@@ -549,6 +647,21 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
         ctx.setLineDash([]);
       }
     });
+
+    if (isLassoing && lassoPoints.length > 0) {
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2 / scale;
+      ctx.setLineDash([5 / scale, 5 / scale]);
+      ctx.beginPath();
+      ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+      lassoPoints.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+      ctx.fill();
+    }
 
     if (laserMode && laserPoints.length > 0) {
       ctx.strokeStyle = '#ef4444';
@@ -566,7 +679,7 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     }
 
     ctx.restore();
-  }, [boardState, panOffset, scale, toolOptions.strokeWidth, snapToGrid, gridSize, laserMode, laserPoints]);
+  }, [boardState, panOffset, scale, toolOptions.strokeWidth, snapToGrid, gridSize, laserMode, laserPoints, isLassoing, lassoPoints, showGuides, guides]);
 
   useEffect(() => {
     drawCanvas();
@@ -608,6 +721,21 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     return Math.abs(x - h.x) < handleSize && Math.abs(y - h.y) < handleSize;
   };
 
+  const isPointInLasso = (x: number, y: number): boolean => {
+    if (lassoPoints.length < 3) return false;
+    
+    let inside = false;
+    for (let i = 0, j = lassoPoints.length - 1; i < lassoPoints.length; j = i++) {
+      const xi = lassoPoints[i].x, yi = lassoPoints[i].y;
+      const xj = lassoPoints[j].x, yj = lassoPoints[j].y;
+      
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (laserMode) {
       const coords = getCanvasCoords(e);
@@ -623,6 +751,12 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     }
 
     const coords = getCanvasCoords(e);
+
+    if (currentTool === 'lasso') {
+      setIsLassoing(true);
+      setLassoPoints([coords]);
+      return;
+    }
 
     if (currentTool === 'select') {
       for (const handlePos of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) {
@@ -661,6 +795,7 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
         setDragStart(coords);
       } else {
         setBoardState(prev => ({ ...prev, selectedIds: [] }));
+        setGuides([]);
       }
     } else if (['rectangle', 'ellipse', 'diamond', 'sticky', 'star', 'heart', 'polygon'].includes(currentTool)) {
       const newElement: BoardElement = {
@@ -824,6 +959,12 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
       return;
     }
 
+    if (isLassoing) {
+      const coords = getCanvasCoords(e);
+      setLassoPoints(prev => [...prev, coords]);
+      return;
+    }
+
     if (!isDragging && !isDrawing && !isResizing) return;
 
     const coords = getCanvasCoords(e);
@@ -943,14 +1084,30 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     } else {
       const selectedElements = boardState.elements.filter(el => boardState.selectedIds.includes(el.id) && !el.locked);
       if (selectedElements.length > 0) {
+        const newGuides = calculateGuides(boardState.elements, boardState.selectedIds, {
+          x: selectedElements[0].x + dx,
+          y: selectedElements[0].y + dy,
+        });
+        setGuides(newGuides);
+
         updateBoardState({
           ...boardState,
           elements: boardState.elements.map(el => {
             if (!boardState.selectedIds.includes(el.id) || el.locked) return el;
+            const snappedX = snapValue(el.x + dx);
+            const snappedY = snapValue(el.y + dy);
+            
+            const alignedX = newGuides.some(g => g.x !== undefined && Math.abs(snappedX - g.x) < 5) 
+              ? (newGuides.find(g => g.x !== undefined && Math.abs(snappedX - g.x) < 5)?.x || snappedX)
+              : snappedX;
+            const alignedY = newGuides.some(g => g.y !== undefined && Math.abs(snappedY - g.y) < 5)
+              ? (newGuides.find(g => g.y !== undefined && Math.abs(snappedY - g.y) < 5)?.y || snappedY)
+              : snappedY;
+            
             return {
               ...el,
-              x: snapValue(el.x + dx),
-              y: snapValue(el.y + dy),
+              x: alignedX,
+              y: alignedY,
             };
           })
         });
@@ -960,13 +1117,24 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
   };
 
   const handleMouseUp = () => {
+    if (isLassoing && lassoPoints.length > 2) {
+      const selectedIds = boardState.elements
+        .filter(el => isPointInLasso(el.x + el.width / 2, el.y + el.height / 2))
+        .map(el => el.id);
+      
+      setBoardState(prev => ({ ...prev, selectedIds }));
+    }
+
     setIsDragging(false);
     setIsPanning(false);
     setIsDrawing(false);
     setIsResizing(false);
+    setIsLassoing(false);
+    setLassoPoints([]);
     setDragStart(null);
     setElementStart(null);
     setResizeHandle(null);
+    setGuides([]);
 
     if (laserMode) {
       if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
@@ -1074,6 +1242,20 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     });
   };
 
+  const handleRotate = () => {
+    const selectedElement = boardState.elements.find(el => boardState.selectedIds.includes(el.id));
+    if (!selectedElement) return;
+    
+    updateBoardState({
+      ...boardState,
+      elements: boardState.elements.map(el => 
+        el.id === selectedElement.id
+          ? { ...el, rotation: ((el.rotation || 0) + 45) % 360 }
+          : el
+      ),
+    });
+  };
+
   const handleAlign = (alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
     const selectedElements = boardState.elements.filter(el => boardState.selectedIds.includes(el.id) && !el.locked);
     if (selectedElements.length < 2) return;
@@ -1159,6 +1341,16 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           el.id === contextMenu.elementId ? { ...el, locked: !el.locked } : el
         ),
       });
+    } else if (action === 'rotate') {
+      const el = boardState.elements.find(e => e.id === contextMenu.elementId);
+      if (el) {
+        updateBoardState({
+          ...boardState,
+          elements: boardState.elements.map(e => 
+            e.id === el.id ? { ...e, rotation: ((e.rotation || 0) + 45) % 360 } : e
+          ),
+        });
+      }
     } else if (action.startsWith('fontSize-')) {
       const size = parseInt(action.split('-')[1]);
       updateBoardState({
@@ -1217,6 +1409,9 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
       case 'align-right':
         newEl.textAlign = 'right';
         break;
+      case 'rotate':
+        newEl.rotation = ((newEl.rotation || 0) + 45) % 360;
+        break;
       default:
         if (action.startsWith('fontSize-')) {
           newEl.fontSize = parseInt(action.split('-')[1]);
@@ -1240,8 +1435,19 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
     }
   };
 
+  const handleExportPNG = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const link = document.createElement('a');
+    link.download = `${title || 'board'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
   const tools: { id: Tool; icon: string; label: string; shortcut?: string }[] = [
     { id: 'select', icon: '↖', label: 'Select', shortcut: 'V' },
+    { id: 'lasso', icon: '⌒', label: 'Lasso', shortcut: 'Q' },
     { id: 'hand', icon: '✋', label: 'Pan', shortcut: 'H' },
     { id: 'rectangle', icon: '▢', label: 'Rectangle', shortcut: 'R' },
     { id: 'ellipse', icon: '◯', label: 'Ellipse', shortcut: 'O' },
@@ -1328,7 +1534,15 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             className={`px-2 py-1 rounded text-xs ${snapToGrid ? 'bg-primary text-white' : 'hover:bg-hover'}`}
             title="Snap to Grid"
           >
-            ⊞ {snapToGrid ? 'On' : 'Off'}
+            ⊞ Grid {snapToGrid ? 'On' : 'Off'}
+          </button>
+
+          <button
+            onClick={() => setShowGuides(!showGuides)}
+            className={`px-2 py-1 rounded text-xs ${showGuides ? 'bg-primary text-white' : 'hover:bg-hover'}`}
+            title="Smart Guides"
+          >
+            ║ Guides {showGuides ? 'On' : 'Off'}
           </button>
 
           <button
@@ -1340,11 +1554,60 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           </button>
 
           <button
+            onClick={handleExportPNG}
+            className="px-2 py-1 rounded text-xs hover:bg-hover"
+            title="Export as PNG"
+          >
+            📷 PNG
+          </button>
+
+          <button
             onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
             className="px-2 py-1 rounded text-xs hover:bg-hover"
             title="Keyboard Shortcuts"
           >
             ⌨️
+          </button>
+
+          {boardState.selectedIds.length > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleAlign('left')}
+                className="px-2 py-1 rounded text-xs hover:bg-hover"
+                title="Align left"
+              >
+                ⬅
+              </button>
+              <button
+                onClick={() => handleAlign('center')}
+                className="px-2 py-1 rounded text-xs hover:bg-hover"
+                title="Align center"
+              >
+                ⬌
+              </button>
+              <button
+                onClick={() => handleAlign('right')}
+                className="px-2 py-1 rounded text-xs hover:bg-hover"
+                title="Align right"
+              >
+                ➡
+              </button>
+              <button
+                onClick={handleGroup}
+                className="px-2 py-1 rounded text-xs hover:bg-hover"
+                title="Group"
+              >
+                ⊞
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={handleRotate}
+            className="px-2 py-1 rounded text-xs hover:bg-hover"
+            title="Rotate 45°"
+          >
+            ↻
           </button>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -1401,7 +1664,7 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
       <div 
         ref={containerRef}
         className="flex-1 relative overflow-hidden"
-        style={{ cursor: laserMode ? 'crosshair' : currentTool === 'hand' ? 'grab' : currentTool === 'select' ? 'default' : 'crosshair' }}
+        style={{ cursor: laserMode ? 'crosshair' : currentTool === 'hand' ? 'grab' : currentTool === 'lasso' ? 'crosshair' : currentTool === 'select' ? 'default' : 'crosshair' }}
       >
         <canvas
           ref={canvasRef}
@@ -1417,8 +1680,8 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
         {boardState.elements.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <div className="text-6xl mb-4">🎨</div>
-            <p className="text-lg font-medium text-text-secondary mb-2">Начните рисовать...</p>
-            <p className="text-sm text-text-secondary">Перетащите фигуры из панели инструментов</p>
+            <p className="text-lg font-medium text-text-secondary mb-2">Start drawing...</p>
+            <p className="text-sm text-text-secondary">Drag shapes from the toolbar</p>
           </div>
         )}
         
@@ -1477,6 +1740,13 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
               ➜
             </button>
             <div className="w-px h-6 bg-border mx-1" />
+            <button
+              onClick={() => handleTextToolbarAction('rotate')}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-hover"
+              title="Rotate"
+            >
+              ↻
+            </button>
             <select
               className="px-2 py-1 text-xs border border-border rounded"
               value={boardState.elements.find(el => boardState.selectedIds.includes(el.id))?.fontSize || 16}
@@ -1494,10 +1764,8 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             <button
               key={tool.id}
               onClick={() => setCurrentTool(tool.id)}
-              className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-                currentTool === tool.id 
-                  ? 'bg-primary text-white' 
-                  : 'hover:bg-hover text-text-secondary'
+              className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${
+                currentTool === tool.id ? 'bg-primary text-white' : 'hover:bg-hover text-text-primary'
               }`}
               title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
             >
@@ -1506,228 +1774,81 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           ))}
           
           <div className="w-px h-8 bg-border mx-1" />
-
-          {boardState.selectedIds.length > 1 && (
-            <>
-              <button
-                onClick={handleGroup}
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Group (Ctrl+G)"
-              >
-                ⊞
-              </button>
-              <button
-                onClick={handleUngroup}
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Ungroup (Ctrl+Shift+G)"
-              >
-                ⧉
-              </button>
-              <div className="w-px h-8 bg-border mx-1" />
-            </>
-          )}
-
-          {boardState.selectedIds.length > 0 && (
-            <>
-              <button
-                onClick={handleCopy}
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Copy (Ctrl+C)"
-              >
-                📋
-              </button>
-              <button
-                onClick={handlePaste}
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Paste (Ctrl+V)"
-              >
-                📄
-              </button>
-              <button
-                onClick={handleDuplicate}
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Duplicate (Ctrl+D)"
-              >
-                ⧉
-              </button>
-              <button
-                onClick={handleToggleLock}
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Lock/Unlock (Ctrl+L)"
-              >
-                {boardState.elements.find(el => boardState.selectedIds.includes(el.id))?.locked ? '🔓' : '🔒'}
-              </button>
-              <div className="w-px h-8 bg-border mx-1" />
-            </>
-          )}
-
-          {boardState.selectedIds.length > 1 && (
-            <div className="flex items-center gap-1 relative group">
-              <button
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-hover text-text-secondary"
-                title="Align"
-              >
-                ⊜
-              </button>
-              <div className="absolute bottom-full mb-2 left-0 hidden group-hover:flex bg-white rounded-lg shadow-lg border border-border p-1">
-                <button onClick={() => handleAlign('left')} className="w-8 h-8 flex items-center justify-center hover:bg-hover rounded" title="Align Left">⬅</button>
-                <button onClick={() => handleAlign('center')} className="w-8 h-8 flex items-center justify-center hover:bg-hover rounded" title="Align Center">⬌</button>
-                <button onClick={() => handleAlign('right')} className="w-8 h-8 flex items-center justify-center hover:bg-hover rounded" title="Align Right">➡</button>
-                <button onClick={() => handleAlign('top')} className="w-8 h-8 flex items-center justify-center hover:bg-hover rounded" title="Align Top">⬆</button>
-                <button onClick={() => handleAlign('middle')} className="w-8 h-8 flex items-center justify-center hover:bg-hover rounded" title="Align Middle">⬍</button>
-                <button onClick={() => handleAlign('bottom')} className="w-8 h-8 flex items-center justify-center hover:bg-hover rounded" title="Align Bottom">⬇</button>
-              </div>
-            </div>
-          )}
           
-          <div className="w-px h-8 bg-border mx-1" />
-          
-          <div className="flex items-center gap-1 relative">
+          <div className="relative">
             <button
               onClick={() => setShowColorPicker(!showColorPicker)}
-              className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center text-sm ${
-                showColorPicker ? 'border-primary' : 'border-transparent hover:bg-hover'
-              }`}
+              className="w-10 h-10 flex items-center justify-center rounded hover:bg-hover"
               style={{ backgroundColor: currentColor }}
               title="Color"
             >
-              🎨
+              <span className="w-4 h-4 rounded-full border-2 border-white shadow" style={{ backgroundColor: currentColor }} />
             </button>
-            {COLORS.slice(0, 5).map(color => (
-              <button
-                key={color}
-                onClick={() => {
-                  setCurrentColor(color);
-                  if (boardState.selectedIds.length > 0) {
-                    updateBoardState({
-                      ...boardState,
-                      elements: boardState.elements.map(el => 
-                        boardState.selectedIds.includes(el.id) ? { ...el, color } : el
-                      ),
-                    });
-                  }
-                }}
-                className={`w-6 h-6 rounded-full border-2 ${
-                  currentColor === color ? 'border-primary' : 'border-transparent'
-                }`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
             {showColorPicker && (
-              <div className="absolute bottom-full mb-2 left-0 z-50">
-                <div 
-                  className="fixed inset-0" 
-                  onClick={() => setShowColorPicker(false)} 
-                />
-                <div className="relative bg-white rounded-lg shadow-xl p-3 border">
-                  <HexColorPicker 
-                    color={currentColor} 
-                    onChange={setCurrentColor}
-                    style={{ width: '180px', height: '150px' }}
-                  />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 bg-white rounded-lg shadow-lg border border-border">
+                <HexColorPicker color={currentColor} onChange={setCurrentColor} />
+                <div className="mt-2 grid grid-cols-5 gap-1">
+                  {COLORS.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setCurrentColor(color)}
+                      className={`w-6 h-6 rounded ${currentColor === color ? 'ring-2 ring-primary' : ''}`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {showKeyboardHelp && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowKeyboardHelp(false)}>
-            <div className="bg-white rounded-xl shadow-xl p-6 max-w-md" onClick={e => e.stopPropagation()}>
-              <h3 className="text-lg font-semibold mb-4">Keyboard Shortcuts</h3>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">V</kbd> Select</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">H</kbd> Pan</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">R</kbd> Rectangle</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">O</kbd> Ellipse</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">D</kbd> Diamond</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">L</kbd> Line</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">A</kbd> Arrow</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">C</kbd> Connector</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">T</kbd> Text</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">S</kbd> Sticky</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">K</kbd> Star</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">U</kbd> Heart</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">G</kbd> Polygon</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">I</kbd> Image</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">P</kbd> Pencil</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">E</kbd> Eraser</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Ctrl+C</kbd> Copy</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Ctrl+V</kbd> Paste</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Ctrl+D</kbd> Duplicate</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Ctrl+G</kbd> Group</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Ctrl+L</kbd> Lock</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Del</kbd> Delete</div>
-                <div><kbd className="px-2 py-1 bg-gray-100 rounded">Esc</kbd> Deselect</div>
-              </div>
-            </div>
+        {contextMenu && (
+          <div 
+            className="fixed z-50 bg-white rounded-lg shadow-lg border border-border py-1 min-w-[160px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              onClick={() => handleContextAction('duplicate')}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2"
+            >
+              📋 Duplicate
+            </button>
+            <button
+              onClick={() => handleContextAction('rotate')}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2"
+            >
+              ↻ Rotate 45°
+            </button>
+            <div className="h-px bg-border my-1" />
+            <button
+              onClick={() => handleContextAction('bringToFront')}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2"
+            >
+              ⬆ Bring to front
+            </button>
+            <button
+              onClick={() => handleContextAction('sendToBack')}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2"
+            >
+              ⬇ Send to back
+            </button>
+            <div className="h-px bg-border my-1" />
+            <button
+              onClick={() => handleContextAction('lock')}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2"
+            >
+              🔒 {boardState.elements.find(e => e.id === contextMenu.elementId)?.locked ? 'Unlock' : 'Lock'}
+            </button>
+            <div className="h-px bg-border my-1" />
+            <button
+              onClick={() => handleContextAction('delete')}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2 text-red-500"
+            >
+              🗑 Delete
+            </button>
           </div>
         )}
       </div>
-
-      {contextMenu && (
-        <div 
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-border py-1 min-w-[180px]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2"
-            onClick={() => handleContextAction('duplicate')}
-          >
-            📋 Duplicate
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2"
-            onClick={handleCopy}
-          >
-            📄 Copy
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2"
-            onClick={handlePaste}
-          >
-            📥 Paste
-          </button>
-          <div className="h-px bg-border my-1" />
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2"
-            onClick={() => handleContextAction('lock')}
-          >
-            {boardState.elements.find(e => e.id === contextMenu.elementId)?.locked ? '🔓 Unlock' : '🔒 Lock'}
-          </button>
-          <div className="h-px bg-border my-1" />
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2"
-            onClick={() => handleContextAction('bringToFront')}
-          >
-            ⬆️ Bring to Front
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2"
-            onClick={() => handleContextAction('sendToBack')}
-          >
-            ⬇️ Send to Back
-          </button>
-          <div className="h-px bg-border my-1" />
-          <div className="px-3 py-1 text-xs text-text-secondary">Font Size</div>
-          {FONT_SIZES.map(size => (
-            <button
-              key={size}
-              className="w-full px-4 py-1 text-sm text-left hover:bg-hover"
-              onClick={() => handleContextAction(`fontSize-${size}`)}
-            >
-              {size}px
-            </button>
-          ))}
-          <div className="h-px bg-border my-1" />
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-hover flex items-center gap-2 text-red-500"
-            onClick={() => handleContextAction('delete')}
-          >
-            🗑️ Delete
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -13,6 +13,11 @@ import { Breadcrumb } from '../Breadcrumb';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 import { EmbedBlock } from './EmbedBlock';
 import { TableBlock } from './TableBlock';
+import { PresenceAvatars } from './PresenceAvatars';
+import { CursorDisplay } from './CursorDisplay';
+import { TableOfContents } from './TableOfContents';
+import { ExportMenu } from './ExportMenu';
+import { VersionHistory } from './VersionHistory';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
@@ -85,6 +90,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
   const [focusMode, setFocusMode] = useState(false);
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
   const lastSavedContentRef = useRef<string>('');
   const isUpdatingRef = useRef(false);
   
@@ -141,7 +148,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
     }
   }, [page?.id]);
 
-  const { connected, sendUpdate } = useWebSocket(page?.id || null, ydocRef.current);
+  const { connected, sendUpdate, sendCursor, sendTyping: _sendTyping, presence } = useWebSocket(page?.id || null, ydocRef.current);
 
   useEffect(() => {
     if (!ydocRef.current) return;
@@ -1034,6 +1041,8 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
             {connected ? 'Connected' : 'Disconnected'}
           </div>
           
+          <PresenceAvatars presence={presence} currentUserId={undefined} maxVisible={4} />
+          
           <span className="px-2 py-1 bg-surface rounded text-xs">
             📄 Text
           </span>
@@ -1070,6 +1079,33 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
             title="Focus mode (Ctrl+/)"
           >
             🎯 Focus
+          </button>
+
+          <TableOfContents
+            blocks={blocks}
+            onNavigate={(blockId) => {
+              const blockEl = document.getElementById(`block-${blockId}`);
+              if (blockEl) {
+                blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                blockEl.focus();
+              }
+            }}
+          />
+
+          <button
+            onClick={() => setShowExportMenu(true)}
+            className="px-2 py-1 hover:bg-hover rounded text-xs"
+            title="Export"
+          >
+            📤 Export
+          </button>
+
+          <button
+            onClick={() => setShowVersionHistory(true)}
+            className="px-2 py-1 hover:bg-hover rounded text-xs"
+            title="Version History"
+          >
+            🕐 History
           </button>
 
           <div className="flex items-center gap-1">
@@ -1114,13 +1150,23 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
         onContextMenu={(e) => handleContextMenu(e)}
         onMouseUp={handleTextSelection}
         onKeyUp={handleTextSelection}
+        onMouseMove={(e) => {
+          if (sendCursor) {
+            sendCursor(e.clientX, e.clientY);
+          }
+        }}
       >
-        {blocks.length === 0 || (blocks.length === 1 && blocks[0].content === '') ? (
-          <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
-            <div className="text-6xl mb-4">✏️</div>
-            <p className="text-lg font-medium mb-2">Начните печатать...</p>
-            <p className="text-sm">Нажмите <kbd className="px-1.5 py-0.5 bg-surface border border-border rounded text-xs">/</kbd> для списка команд</p>
-          </div>
+        {blocks.length === 0 || (blocks.length === 1 && isBlockEmpty(blocks[0].content)) ? (
+          <>
+            {blocks.map((block, index) => renderBlock(block, index))}
+            {blocks.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-64 text-text-secondary pointer-events-none">
+                <div className="text-6xl mb-4">✏️</div>
+                <p className="text-lg font-medium mb-2">Начните печатать...</p>
+                <p className="text-sm">Нажмите <kbd className="px-1.5 py-0.5 bg-surface border border-border rounded text-xs">/</kbd> для списка команд</p>
+              </div>
+            )}
+          </>
         ) : (
           blocks.map((block, index) => renderBlock(block, index))
         )}
@@ -1175,6 +1221,26 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       {showShortcuts && (
         <ShortcutHelpModal onClose={() => setShowShortcuts(false)} />
       )}
+
+      {showExportMenu && (
+        <ExportMenu
+          blocks={blocks}
+          title={title}
+          onClose={() => setShowExportMenu(false)}
+        />
+      )}
+
+      {showVersionHistory && (
+        <VersionHistory
+          onClose={() => setShowVersionHistory(false)}
+          onRestore={(version) => {
+            console.log('Restore version:', version);
+            setShowVersionHistory(false);
+          }}
+        />
+      )}
+
+      <CursorDisplay presence={presence} currentUserId={undefined} />
     </div>
   );
 }
