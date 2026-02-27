@@ -28,6 +28,10 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
+  const [createWorkspaceName, setCreateWorkspaceName] = useState('');
+  const [createWorkspaceIcon, setCreateWorkspaceIcon] = useState('📁');
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createPageParentId, setCreatePageParentId] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSection, setActiveSection] = useState<SidebarSection>('pages');
@@ -116,16 +120,28 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
     }
   };
 
-  const handleCreateWorkspace = async () => {
-    const name = prompt('Enter workspace name:');
-    if (!name) return;
+  const handleCreateWorkspaceClick = () => {
+    setCreateWorkspaceName('');
+    setCreateWorkspaceIcon('📁');
+    setShowCreateWorkspaceModal(true);
+  };
 
+  const handleCreateWorkspace = async () => {
+    if (!createWorkspaceName.trim()) return;
+
+    setCreatingWorkspace(true);
     try {
-      const workspace = await api.createWorkspace({ name });
+      const workspace = await api.createWorkspace({ 
+        name: createWorkspaceName.trim(),
+        icon: createWorkspaceIcon,
+      });
       setWorkspaces(prev => [...prev, workspace]);
       setSelectedWorkspace(workspace);
+      setShowCreateWorkspaceModal(false);
     } catch (err) {
       console.error('Failed to create workspace:', err);
+    } finally {
+      setCreatingWorkspace(false);
     }
   };
 
@@ -248,10 +264,11 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
         </div>
 
         <button
-          onClick={handleCreateWorkspace}
-          className="mt-2 w-full px-2 py-1 text-sm text-text-secondary hover:bg-hover rounded text-left"
+          onClick={handleCreateWorkspaceClick}
+          className="mt-2 w-full px-2 py-1 text-sm text-text-secondary hover:bg-hover rounded text-left flex items-center gap-2"
         >
-          + New Workspace
+          <span className="text-lg">+</span>
+          <span>New Workspace</span>
         </button>
       </div>
 
@@ -388,6 +405,69 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
             setShowSearchModal(false);
           }}
         />
+      )}
+
+      {/* Create Workspace Modal */}
+      {showCreateWorkspaceModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-lg font-semibold text-text mb-4">Create Workspace</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">Icon</label>
+                <div className="flex flex-wrap gap-2">
+                  {['📁', '💼', '📚', '🎯', '🚀', '🌟', '💡', '🎨', '🏠', '🌈'].map((icon) => (
+                    <button
+                      key={icon}
+                      onClick={() => setCreateWorkspaceIcon(icon)}
+                      className={`text-xl p-2 rounded-lg transition-colors ${
+                        createWorkspaceIcon === icon
+                          ? 'bg-primary/10 ring-2 ring-primary'
+                          : 'hover:bg-surface-hover'
+                      }`}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text mb-1.5">Workspace Name</label>
+                <input
+                  type="text"
+                  value={createWorkspaceName}
+                  onChange={(e) => setCreateWorkspaceName(e.target.value)}
+                  placeholder="Enter workspace name"
+                  className="w-full px-3 py-2 border border-border rounded-md bg-surface text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && createWorkspaceName.trim()) {
+                      handleCreateWorkspace();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowCreateWorkspaceModal(false)}
+                className="flex-1 px-4 py-2 text-text-secondary hover:bg-surface-hover rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateWorkspace}
+                disabled={!createWorkspaceName.trim() || creatingWorkspace}
+                className="flex-1 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingWorkspace ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
