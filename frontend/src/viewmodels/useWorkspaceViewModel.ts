@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '../services/api';
-import { Workspace, WorkspaceMember } from '../types';
+import { Workspace, WorkspacesWithGroupsResponse, WorkspaceMember } from '../types';
 import { useToast } from '../hooks/useToast';
 
 interface WorkspaceState {
-  workspaces: Workspace[];
+  workspaces: WorkspacesWithGroupsResponse;
   currentWorkspace: Workspace | null;
   members: WorkspaceMember[];
   loading: boolean;
@@ -13,7 +13,7 @@ interface WorkspaceState {
 
 export function useWorkspaceViewModel(token: string | null) {
   const [state, setState] = useState<WorkspaceState>({
-    workspaces: [],
+    workspaces: { groups: [], workspaces: [] },
     currentWorkspace: null,
     members: [],
     loading: false,
@@ -27,11 +27,12 @@ export function useWorkspaceViewModel(token: string | null) {
     
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const workspaces = await api.getWorkspaces() || [];
+      const workspaces = await api.getWorkspaces();
+      const rootWorkspaces = (workspaces.workspaces || []).filter((w: Workspace) => !w.parent_id);
       setState(prev => ({
         ...prev,
         workspaces,
-        currentWorkspace: workspaces[0] || null,
+        currentWorkspace: rootWorkspaces[0] || null,
         loading: false,
       }));
     } catch (error) {
@@ -51,10 +52,10 @@ export function useWorkspaceViewModel(token: string | null) {
   const createWorkspace = useCallback(async (name: string, icon?: string) => {
     setState(prev => ({ ...prev, loading: true }));
     try {
-      const workspace = await api.createWorkspace({ name, icon });
+      const workspace = await api.createWorkspace({ name, icon, is_text_type: false });
       setState(prev => ({
         ...prev,
-        workspaces: [...prev.workspaces, workspace],
+        workspaces: { ...prev.workspaces, workspaces: [...(prev.workspaces.workspaces || []), workspace] },
         currentWorkspace: workspace,
         loading: false,
       }));
@@ -72,7 +73,10 @@ export function useWorkspaceViewModel(token: string | null) {
       const updated = await api.updateWorkspace(id, data);
       setState(prev => ({
         ...prev,
-        workspaces: prev.workspaces.map(w => w.id === id ? updated : w),
+        workspaces: {
+          ...prev.workspaces,
+          workspaces: (prev.workspaces.workspaces || []).map(w => w.id === id ? updated : w),
+        },
         currentWorkspace: prev.currentWorkspace?.id === id ? updated : prev.currentWorkspace,
       }));
       showToast('Workspace updated', 'success');
@@ -86,11 +90,15 @@ export function useWorkspaceViewModel(token: string | null) {
   const deleteWorkspace = useCallback(async (id: string) => {
     try {
       await api.deleteWorkspace(id);
+      const wsList = (state.workspaces.workspaces || []).filter(w => w.id !== id);
       setState(prev => ({
         ...prev,
-        workspaces: prev.workspaces.filter(w => w.id !== id),
+        workspaces: {
+          ...prev.workspaces,
+          workspaces: wsList,
+        },
         currentWorkspace: prev.currentWorkspace?.id === id 
-          ? prev.workspaces[0] || null 
+          ? wsList[0] || null 
           : prev.currentWorkspace,
       }));
       showToast('Workspace deleted', 'success');
@@ -98,7 +106,7 @@ export function useWorkspaceViewModel(token: string | null) {
       showToast('Failed to delete workspace', 'error');
       throw error;
     }
-  }, [showToast]);
+  }, [showToast, state.workspaces.workspaces]);
 
   const loadMembers = useCallback(async (workspaceId: string) => {
     try {
@@ -156,6 +164,8 @@ export function useWorkspaceViewModel(token: string | null) {
 
   return {
     ...state,
+    workspaceList: state.workspaces.workspaces || [],
+    groups: state.workspaces.groups || [],
     loadWorkspaces,
     selectWorkspace,
     createWorkspace,

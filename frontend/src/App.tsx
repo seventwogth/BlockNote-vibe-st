@@ -12,7 +12,6 @@ import { Input } from './ui/components/Input/Input';
 import { Spinner } from './ui/components/Spinner/Spinner';
 
 const BlockEditor = lazy(() => import('./components/Editor/BlockEditor').then(m => ({ default: m.BlockEditor })));
-const BoardEditor = lazy(() => import('./components/Editor/BoardEditor').then(m => ({ default: m.BoardEditor })));
 
 function PageLoader() {
   return (
@@ -101,12 +100,6 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           {loading ? (
             <PageLoader />
-          ) : page?.page_type === 'board' ? (
-            <BoardEditor
-              page={page}
-              onSaveContent={handleSaveContent}
-              onUpdatePage={handleUpdatePage}
-            />
           ) : (
             <BlockEditor
               page={page}

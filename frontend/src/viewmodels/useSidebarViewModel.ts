@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '../services/api';
-import { Workspace, Page } from '../types';
+import { Workspace, WorkspacesWithGroupsResponse, Page } from '../types';
 import { useToast } from '../hooks/useToast';
 
 interface SidebarState {
-  workspaces: Workspace[];
+  workspaces: WorkspacesWithGroupsResponse;
   currentWorkspace: Workspace | null;
   pages: Page[];
   favorites: Page[];
@@ -22,7 +22,7 @@ interface UseSidebarViewModelProps {
 
 export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
   const [state, setState] = useState<SidebarState>({
-    workspaces: [],
+    workspaces: { groups: [], workspaces: [] },
     currentWorkspace: null,
     pages: [],
     favorites: [],
@@ -42,11 +42,12 @@ export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
 
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const workspaces = await api.getWorkspaces() || [];
+      const workspaces = await api.getWorkspaces();
+      const rootWorkspaces = (workspaces.workspaces || []).filter((w: Workspace) => !w.parent_id);
       setState(prev => ({
         ...prev,
         workspaces,
-        currentWorkspace: workspaces[0] || null,
+        currentWorkspace: rootWorkspaces[0] || null,
         loading: false,
       }));
     } catch (error) {
@@ -115,10 +116,10 @@ export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
 
   const createWorkspace = useCallback(async (name: string, icon?: string) => {
     try {
-      const workspace = await api.createWorkspace({ name, icon });
+      const workspace = await api.createWorkspace({ name, icon, is_text_type: false });
       setState(prev => ({
         ...prev,
-        workspaces: [...prev.workspaces, workspace],
+        workspaces: { ...prev.workspaces, workspaces: [...(prev.workspaces.workspaces || []), workspace] },
         currentWorkspace: workspace,
       }));
       showToast('Workspace created!', 'success');
@@ -129,7 +130,7 @@ export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
     }
   }, [showToast]);
 
-  const createPage = useCallback(async (pageType: 'text' | 'board', parentId?: string) => {
+  const createPage = useCallback(async (pageType: 'text', parentId?: string) => {
     if (!state.currentWorkspace) return;
 
     try {
@@ -215,6 +216,8 @@ export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
 
   return {
     ...state,
+    workspaceList: state.workspaces.workspaces || [],
+    groups: state.workspaces.groups || [],
     activeSection,
     setActiveSection,
     searchQuery,

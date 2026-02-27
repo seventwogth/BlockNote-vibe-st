@@ -147,8 +147,7 @@ function SortablePageItem({
     transition,
   };
 
-  const getPageIcon = (pageType?: string) => {
-    if (pageType === 'board') return '🎨';
+  const getPageIcon = () => {
     return page.icon || '📄';
   };
 
@@ -190,7 +189,7 @@ function SortablePageItem({
         ⋮⋮
       </button>
 
-      <span className="text-sm">{getPageIcon(page.page_type)}</span>
+      <span className="text-sm">{getPageIcon()}</span>
       <span className={`text-sm truncate ${page.is_favorite ? 'font-medium' : ''}`}>
         {page.title}
       </span>

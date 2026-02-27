@@ -13,9 +13,27 @@ export interface Workspace {
   icon?: string;
   description?: string;
   owner_id: string;
+  parent_id?: string;
+  workspace_group_id?: string;
+  is_text_type: boolean;
+  position: number;
   settings?: WorkspaceSettings;
   created_at: string;
   updated_at: string;
+  children?: Workspace[];
+  workspaces?: Workspace[];
+}
+
+export interface WorkspaceGroup {
+  id: string;
+  name: string;
+  icon?: string;
+  owner_id: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  workspaces?: Workspace[];
+  groups?: WorkspaceGroup[];
 }
 
 export interface WorkspaceSettings {
@@ -43,7 +61,7 @@ export interface Page {
   owner_id: string;
   title: string;
   icon?: string;
-  page_type: 'text' | 'board';
+  page_type: 'text';
   content_text?: string;
   is_archived: boolean;
   is_favorite?: boolean;
@@ -107,6 +125,19 @@ export interface CreateWorkspaceRequest {
   name: string;
   icon?: string;
   description?: string;
+  parent_id?: string;
+  workspace_group_id?: string;
+  is_text_type: boolean;
+}
+
+export interface CreateWorkspaceGroupRequest {
+  name: string;
+  icon?: string;
+}
+
+export interface WorkspacesWithGroupsResponse {
+  groups: WorkspaceGroup[];
+  workspaces: Workspace[];
 }
 
 export interface UpdateWorkspaceRequest {
@@ -120,7 +151,7 @@ export interface CreatePageRequest {
   parent_id?: string;
   title?: string;
   icon?: string;
-  page_type: 'text' | 'board';
+  page_type: 'text';
 }
 
 export interface UpdatePageRequest {

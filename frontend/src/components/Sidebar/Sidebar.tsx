@@ -39,7 +39,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const [createPageParentId, setCreatePageParentId] = useState<string | undefined>(undefined);
 
   const {
-    workspaces,
+    workspaceList,
     currentWorkspace,
     loading,
     activeSection,
@@ -93,8 +93,8 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
     setShowCreatePageModal(true);
   };
 
-  const handleCreatePage = async (pageType: 'text' | 'board') => {
-    const page = await createPage(pageType, createPageParentId);
+  const handleCreatePage = async () => {
+    const page = await createPage('text', createPageParentId);
     if (page) {
       onSelectPage(page.id);
       setShowCreatePageModal(false);
@@ -137,12 +137,12 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
             <select
               value={currentWorkspace?.id || ''}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                const ws = workspaces.find(w => w.id === e.target.value);
+                const ws = workspaceList.find(w => w.id === e.target.value);
                 if (ws) selectWorkspace(ws);
               }}
               className="flex-1 px-2 py-1 text-sm border border-border rounded bg-surface font-medium"
             >
-              {workspaces.map((ws) => (
+              {workspaceList.map((ws) => (
                 <option key={ws.id} value={ws.id}>
                   {ws.name}
                 </option>

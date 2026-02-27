@@ -3,10 +3,13 @@ import {
   RegisterRequest,
   LoginRequest,
   Workspace,
+  WorkspaceGroup,
   WorkspaceWithMembers,
   WorkspaceMember,
   CreateWorkspaceRequest,
+  CreateWorkspaceGroupRequest,
   UpdateWorkspaceRequest,
+  WorkspacesWithGroupsResponse,
   Page,
   PageWithContent,
   CreatePageRequest,
@@ -91,14 +94,38 @@ class ApiService {
     this.setToken(null);
   }
 
-  async getWorkspaces(): Promise<Workspace[]> {
-    return this.request<Workspace[]>('/workspaces');
+  async getWorkspaces(): Promise<WorkspacesWithGroupsResponse> {
+    return this.request<WorkspacesWithGroupsResponse>('/workspaces');
   }
 
   async createWorkspace(data: CreateWorkspaceRequest): Promise<Workspace> {
     return this.request<Workspace>('/workspaces', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  async getWorkspaceChildren(workspaceId: string): Promise<Workspace[]> {
+    return this.request<Workspace[]>(`/workspaces/${workspaceId}/workspaces`);
+  }
+
+  async createWorkspaceGroup(data: CreateWorkspaceGroupRequest): Promise<WorkspaceGroup> {
+    return this.request<WorkspaceGroup>('/workspace-groups', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateWorkspaceGroup(groupId: string, data: { name?: string; icon?: string }): Promise<WorkspaceGroup> {
+    return this.request<WorkspaceGroup>(`/workspace-groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteWorkspaceGroup(groupId: string): Promise<void> {
+    return this.request<void>(`/workspace-groups/${groupId}`, {
+      method: 'DELETE',
     });
   }
 

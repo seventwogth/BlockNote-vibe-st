@@ -60,7 +60,10 @@ func (h *WorkspaceHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(workspaces)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"groups":     []interface{}{},
+		"workspaces": workspaces,
+	})
 }
 
 func (h *WorkspaceHandler) Get(w http.ResponseWriter, r *http.Request) {

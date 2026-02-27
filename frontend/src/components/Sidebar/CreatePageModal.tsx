@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 
 interface CreatePageModalProps {
   onClose: () => void;
-  onCreate: (pageType: 'text' | 'board') => void;
+  onCreate: () => void;
 }
 
 export function CreatePageModal({ onClose, onCreate }: CreatePageModalProps) {
@@ -35,14 +35,14 @@ export function CreatePageModal({ onClose, onCreate }: CreatePageModalProps) {
       >
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold">Create a new page</h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Choose a page type. You can't change this later.
-          </p>
         </div>
         
-        <div className="p-4 space-y-3">
+        <div className="p-4">
           <button
-            onClick={() => onCreate('text')}
+            onClick={() => {
+              onCreate();
+              onClose();
+            }}
             className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-hover transition-colors flex items-center gap-4 text-left group"
           >
             <div className="w-12 h-12 bg-surface rounded-lg flex items-center justify-center text-2xl">
@@ -52,21 +52,6 @@ export function CreatePageModal({ onClose, onCreate }: CreatePageModalProps) {
               <div className="font-medium group-hover:text-primary">Text Page</div>
               <div className="text-sm text-text-secondary">
                 Write docs, notes, and more
-              </div>
-            </div>
-          </button>
-          
-          <button
-            onClick={() => onCreate('board')}
-            className="w-full p-4 rounded-lg border border-border hover:border-primary hover:bg-hover transition-colors flex items-center gap-4 text-left group"
-          >
-            <div className="w-12 h-12 bg-surface rounded-lg flex items-center justify-center text-2xl">
-              🎨
-            </div>
-            <div>
-              <div className="font-medium group-hover:text-primary">Board</div>
-              <div className="text-sm text-text-secondary">
-                Brainstorm on an infinite canvas
               </div>
             </div>
           </button>

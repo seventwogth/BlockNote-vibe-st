@@ -83,7 +83,7 @@ export function usePages(workspaceId: string | null) {
     loadPages();
   }, [loadPages]);
 
-  const createPage = async (parentId?: string, pageType: 'text' | 'board' = 'text') => {
+  const createPage = async (parentId?: string, pageType: 'text' = 'text') => {
     if (!workspaceId) return;
     
     try {

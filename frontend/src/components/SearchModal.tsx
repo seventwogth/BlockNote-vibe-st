@@ -99,7 +99,7 @@ export function SearchModal({ workspaceId, onClose, onSelectPage }: SearchModalP
                     )}
                   </div>
                   <span className="text-xs text-text-secondary">
-                    {page.page_type === 'board' ? '🎨' : '📄'}
+                    📄
                   </span>
                 </button>
               ))}
