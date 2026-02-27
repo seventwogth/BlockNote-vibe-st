@@ -1,52 +1,74 @@
 :root {
-  /* Brand Colors */
-  --color-brand-50: #fef2f2;
-  --color-brand-100: #fee2e2;
-  --color-brand-200: #fecaca;
-  --color-brand-300: #fca5a5;
-  --color-brand-400: #f87171;
-  --color-brand-500: #ef4444;
-  --color-brand-600: #dc2626;
-  --color-brand-700: #b91c1c;
-  --color-brand-800: #991b1b;
-  --color-brand-900: #7f1d1d;
+  /* Brand Colors - Unique palette */
+  --color-brand-50: #f0fdf4;
+  --color-brand-100: #dcfce7;
+  --color-brand-200: #bbf7d0;
+  --color-brand-300: #86efac;
+  --color-brand-400: #4ade80;
+  --color-brand-500: #22c55e;
+  --color-brand-600: #16a34a;
+  --color-brand-700: #15803d;
+  --color-brand-800: #166534;
+  --color-brand-900: #14532d;
 
-  /* Primary Colors */
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #60a5fa;
-  --color-primary-dark: #1d4ed8;
+  /* Primary Colors - Deep Purple/Violet theme */
+  --color-primary: #8b5cf6;
+  --color-primary-hover: #7c3aed;
+  --color-primary-light: #a78bfa;
+  --color-primary-dark: #6d28d9;
+  --color-primary-bg: #f5f3ff;
+
+  /* Accent - Coral/Orange for highlights */
+  --color-accent: #f97316;
+  --color-accent-hover: #ea580c;
+  --color-accent-light: #fb923c;
+  --color-accent-bg: #fff7ed;
 
   /* Semantic Colors */
   --color-success: #10b981;
   --color-success-bg: #ecfdf5;
+  --color-success-text: #047857;
   --color-warning: #f59e0b;
   --color-warning-bg: #fffbeb;
+  --color-warning-text: #b45309;
   --color-error: #ef4444;
   --color-error-bg: #fef2f2;
+  --color-error-text: #b91c1c;
   --color-info: #3b82f6;
   --color-info-bg: #eff6ff;
+  --color-info-text: #1d4ed8;
 
-  /* Neutral Colors - Light Mode */
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f9fafb;
-  --color-bg-tertiary: #f3f4f6;
+  /* Neutral Colors - Light Mode - Warm gray */
+  --color-bg: #fafaf9;
+  --color-bg-secondary: #f5f5f4;
+  --color-bg-tertiary: #e7e5e4;
   --color-surface: #ffffff;
-  --color-surface-hover: #f9fafb;
-  --color-surface-active: #f3f4f6;
+  --color-surface-hover: #f5f5f4;
+  --color-surface-active: #e7e5e4;
+  --color-surface-elevated: #ffffff;
 
-  --color-text: #111827;
-  --color-text-secondary: #6b7280;
-  --color-text-tertiary: #9ca3af;
-  --color-text-disabled: #d1d5db;
+  --color-text: #1c1917;
+  --color-text-secondary: #57534e;
+  --color-text-tertiary: #a8a29e;
+  --color-text-disabled: #d6d3d1;
+  --color-text-inverse: #ffffff;
 
-  --color-border: #e5e7eb;
-  --color-border-light: #f3f4f6;
-  --color-border-focus: #3b82f6;
+  --color-border: #e7e5e4;
+  --color-border-light: #f5f5f4;
+  --color-border-focus: #8b5cf6;
+
+  /* Shadows with color tint */
+  --shadow-xs: 0 1px 2px 0 rgb(139 92 246 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(139 92 246 / 0.1), 0 1px 2px -1px rgb(139 92 246 / 0.1);
+  --shadow: 0 1px 3px 0 rgb(139 92 246 / 0.1), 0 1px 2px -1px rgb(139 92 246 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(139 92 246 / 0.1), 0 2px 4px -2px rgb(139 92 246 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(139 92 246 / 0.1), 0 4px 6px -4px rgb(139 92 246 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(139 92 246 / 0.15), 0 8px 10px -6px rgb(139 92 246 / 0.1);
+  --shadow-focus: 0 0 0 3px rgb(139 92 246 / 0.2);
 
   /* Typography */
-  --font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Oxygen", "Ubuntu", sans-serif;
-  --font-family-mono: "SF Mono", "Fira Code", "Monaco", "Consolas", monospace;
+  --font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Oxygen", "Ubuntu", sans-serif;
+  --font-family-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Monaco", "Consolas", monospace;
 
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
@@ -89,18 +111,11 @@
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-
   /* Transitions */
   --transition-fast: 150ms ease;
   --transition: 200ms ease;
   --transition-slow: 300ms ease;
+  --transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Z-index */
   --z-dropdown: 100;
@@ -114,28 +129,36 @@
   /* Layout */
   --sidebar-width: 260px;
   --header-height: 56px;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-primary);
 }
 
 /* Dark Mode */
 .dark {
-  --color-bg: #0f172a;
-  --color-bg-secondary: #1e293b;
-  --color-bg-tertiary: #334155;
-  --color-surface: #1e293b;
-  --color-surface-hover: #334155;
-  --color-surface-active: #475569;
+  --color-bg: #0c0a09;
+  --color-bg-secondary: #1c1917;
+  --color-bg-tertiary: #292524;
+  --color-surface: #1c1917;
+  --color-surface-hover: #292524;
+  --color-surface-active: #44403c;
+  --color-surface-elevated: #1c1917;
 
-  --color-text: #f9fafb;
-  --color-text-secondary: #9ca3af;
-  --color-text-tertiary: #6b7280;
-  --color-text-disabled: #4b5563;
+  --color-text: #fafaf9;
+  --color-text-secondary: #a8a29e;
+  --color-text-tertiary: #78716c;
+  --color-text-disabled: #57534e;
+  --color-text-inverse: #1c1917;
 
-  --color-border: #334155;
-  --color-border-light: #1e293b;
-  --color-border-focus: #60a5fa;
+  --color-border: #292524;
+  --color-border-light: #1c1917;
+  --color-border-focus: #a78bfa;
 
-  --color-success-bg: #064e3b;
-  --color-warning-bg: #78350f;
-  --color-error-bg: #7f1d1d;
-  --color-info-bg: #1e3a8a;
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+  --shadow-focus: 0 0 0 3px rgb(139 92 246 / 0.3);
 }

@@ -1,14 +1,26 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Layout } from './components/Layout/Layout';
 import { Sidebar } from './components/Sidebar/Sidebar';
-import { BlockEditor } from './components/Editor/BlockEditor';
-import { BoardEditor } from './components/Editor/BoardEditor';
 import { ToastContainer } from './components/Toast';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme.tsx';
 import { usePage } from './hooks/usePage';
 import { api } from './services/api';
 import { User } from './types';
+import { Button } from './ui/components/Button/Button';
+import { Input } from './ui/components/Input/Input';
+import { Spinner } from './ui/components/Spinner/Spinner';
+
+const BlockEditor = lazy(() => import('./components/Editor/BlockEditor').then(m => ({ default: m.BlockEditor })));
+const BoardEditor = lazy(() => import('./components/Editor/BoardEditor').then(m => ({ default: m.BoardEditor })));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <Spinner size="lg" />
+    </div>
+  );
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -86,24 +98,24 @@ function App() {
         user={user ? { name: user.name, email: user.email } : undefined}
         onLogout={handleLogout}
       >
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-text-secondary">Loading...</span>
-          </div>
-        ) : page?.page_type === 'board' ? (
-          <BoardEditor
-            page={page}
-            onSaveContent={handleSaveContent}
-            onUpdatePage={handleUpdatePage}
-          />
-        ) : (
-          <BlockEditor
-            page={page}
-            onSaveContent={handleSaveContent}
-            onUpdatePage={handleUpdatePage}
-            onNavigate={handleSelectPage}
-          />
-        )}
+        <Suspense fallback={<PageLoader />}>
+          {loading ? (
+            <PageLoader />
+          ) : page?.page_type === 'board' ? (
+            <BoardEditor
+              page={page}
+              onSaveContent={handleSaveContent}
+              onUpdatePage={handleUpdatePage}
+            />
+          ) : (
+            <BlockEditor
+              page={page}
+              onSaveContent={handleSaveContent}
+              onUpdatePage={handleUpdatePage}
+              onNavigate={handleSelectPage}
+            />
+          )}
+        </Suspense>
       </Layout>
       <ToastContainer />
     </ToastProvider>
@@ -119,71 +131,87 @@ function AuthScreen({ onLogin }: AuthScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(email, password, name);
+    setLoading(true);
+    try {
+      await onLogin(email, password, name);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-surface">
-      <div className="bg-white p-8 rounded-lg shadow-sm border border-border w-96">
-        <h1 className="text-2xl font-semibold text-center mb-6">
-          {isRegister ? 'Create Account' : 'Sign In'}
-        </h1>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isRegister && (
-            <div>
-              <label className="block text-sm text-text-secondary mb-1">Name</label>
-              <input
+    <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="text-5xl mb-4">📝</div>
+          <h1 className="text-3xl font-bold text-text mb-2">BlockNote</h1>
+          <p className="text-text-secondary">Your workspace for notes & boards</p>
+        </div>
+
+        <div className="bg-surface rounded-xl shadow-lg border border-border p-8">
+          <h2 className="text-xl font-semibold text-text text-center mb-6">
+            {isRegister ? 'Create Account' : 'Welcome Back'}
+          </h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {isRegister && (
+              <Input
+                label="Full Name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary"
+                placeholder="Enter your name"
                 required
               />
-            </div>
-          )}
-          
-          <div>
-            <label className="block text-sm text-text-secondary mb-1">Email</label>
-            <input
+            )}
+            
+            <Input
+              label="Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary"
+              placeholder="Enter your email"
               required
             />
-          </div>
-          
-          <div>
-            <label className="block text-sm text-text-secondary mb-1">Password</label>
-            <input
+            
+            <Input
+              label="Password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:border-primary"
+              placeholder="Enter your password"
               required
             />
-          </div>
+            
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={loading}
+            >
+              {isRegister ? 'Create Account' : 'Sign In'}
+            </Button>
+          </form>
           
-          <button
-            type="submit"
-            className="w-full py-2 bg-primary text-white rounded hover:opacity-90"
-          >
-            {isRegister ? 'Sign Up' : 'Sign In'}
-          </button>
-        </form>
-        
-        <p className="mt-4 text-center text-sm text-text-secondary">
-          {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button
-            onClick={() => setIsRegister(!isRegister)}
-            className="text-primary hover:underline"
-          >
-            {isRegister ? 'Sign In' : 'Sign Up'}
-          </button>
+          <p className="mt-6 text-center text-sm text-text-secondary">
+            {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
+            <button
+              type="button"
+              onClick={() => setIsRegister(!isRegister)}
+              className="text-primary hover:underline font-medium"
+            >
+              {isRegister ? 'Sign In' : 'Sign Up'}
+            </button>
+          </p>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-text-secondary">
+          By continuing, you agree to our Terms of Service and Privacy Policy
         </p>
       </div>
     </div>

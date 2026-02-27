@@ -1,0 +1,5 @@
+{
+  "*.{js,jsx,ts,tsx}": ["eslint --fix", "vitest related --run"],
+  "*.{css,scss}": ["stylelint --fix"],
+  "*.{ts,tsx}": ["tsc --noEmit"]
+}

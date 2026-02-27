@@ -1,12 +1,23 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageTree } from './PageTree';
 import { SortablePageList } from './SortablePageList';
-import { Workspace, Page } from '../../types';
-import { api } from '../../services/api';
+import { Workspace } from '../../types';
 import { ShareModal } from '../ShareModal';
 import { SettingsModal } from '../SettingsModal';
 import { CreatePageModal } from './CreatePageModal';
 import { SearchModal } from '../SearchModal';
+import { useSidebarViewModel } from '../../viewmodels/useSidebarViewModel';
+import { Button } from '../../ui/components/Button/Button';
+import { Input } from '../../ui/components/Input/Input';
+import { 
+  Sidebar as UISidebar, 
+  SidebarHeader, 
+  SidebarContent, 
+  SidebarSection,
+  SidebarItem,
+  SidebarGroup
+} from '../../ui/components/Sidebar/Sidebar';
+import { Spinner } from '../../ui/components/Spinner/Spinner';
 
 interface SidebarProps {
   selectedPageId?: string;
@@ -14,16 +25,9 @@ interface SidebarProps {
   token?: string | null;
 }
 
-type SidebarSection = 'pages' | 'favorites' | 'recent' | 'archive' | 'trash';
+type SidebarSectionType = 'pages' | 'favorites' | 'recent' | 'archive' | 'trash';
 
 export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
-  const [pages, setPages] = useState<Page[]>([]);
-  const [favorites, setFavorites] = useState<Page[]>([]);
-  const [recent, setRecent] = useState<Page[]>([]);
-  const [archived, setArchived] = useState<Page[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
@@ -33,30 +37,24 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const [createWorkspaceIcon, setCreateWorkspaceIcon] = useState('📁');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createPageParentId, setCreatePageParentId] = useState<string | undefined>(undefined);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeSection, setActiveSection] = useState<SidebarSection>('pages');
 
-  const filteredPages = pages.filter(page => 
-    page.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  useEffect(() => {
-    if (token) {
-      loadWorkspaces();
-    }
-  }, [token]);
-
-  useEffect(() => {
-    if (selectedWorkspace) {
-      loadPages(selectedWorkspace.id);
-      loadFavorites(selectedWorkspace.id);
-      loadArchived(selectedWorkspace.id);
-    }
-  }, [selectedWorkspace]);
-
-  useEffect(() => {
-    loadRecent();
-  }, []);
+  const {
+    workspaces,
+    currentWorkspace,
+    loading,
+    activeSection,
+    setActiveSection,
+    searchQuery,
+    setSearchQuery,
+    filteredPages,
+    selectWorkspace,
+    createWorkspace,
+    createPage,
+    toggleFavorite,
+    archivePage,
+    getCurrentPages,
+    reorderPages,
+  } = useSidebarViewModel({ token: token || null });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,56 +68,6 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const loadWorkspaces = async () => {
-    try {
-      const data = await api.getWorkspaces() || [];
-      setWorkspaces(data);
-      if (data.length > 0) {
-        setSelectedWorkspace(data[0]);
-      }
-    } catch (err) {
-      console.error('Failed to load workspaces:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPages = async (workspaceId: string) => {
-    try {
-      const data = await api.getWorkspacePages(workspaceId) || [];
-      setPages(data);
-    } catch (err) {
-      console.error('Failed to load pages:', err);
-    }
-  };
-
-  const loadFavorites = async (workspaceId: string) => {
-    try {
-      const data = await api.getFavoritePages(workspaceId);
-      setFavorites(data || []);
-    } catch (err) {
-      console.error('Failed to load favorites:', err);
-    }
-  };
-
-  const loadRecent = async () => {
-    try {
-      const data = await api.getRecentPages(10);
-      setRecent(data || []);
-    } catch (err) {
-      console.error('Failed to load recent:', err);
-    }
-  };
-
-  const loadArchived = async (workspaceId: string) => {
-    try {
-      const data = await api.getArchivedPages(workspaceId);
-      setArchived(data || []);
-    } catch (err) {
-      console.error('Failed to load archived:', err);
-    }
-  };
-
   const handleCreateWorkspaceClick = () => {
     setCreateWorkspaceName('');
     setCreateWorkspaceIcon('📁');
@@ -131,12 +79,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
 
     setCreatingWorkspace(true);
     try {
-      const workspace = await api.createWorkspace({ 
-        name: createWorkspaceName.trim(),
-        icon: createWorkspaceIcon,
-      });
-      setWorkspaces(prev => [...prev, workspace]);
-      setSelectedWorkspace(workspace);
+      await createWorkspace(createWorkspaceName.trim(), createWorkspaceIcon);
       setShowCreateWorkspaceModal(false);
     } catch (err) {
       console.error('Failed to create workspace:', err);
@@ -151,228 +94,141 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   };
 
   const handleCreatePage = async (pageType: 'text' | 'board') => {
-    if (!selectedWorkspace) return;
-
-    try {
-      const page = await api.createPage({
-        workspace_id: selectedWorkspace.id,
-        parent_id: createPageParentId,
-        title: 'Untitled',
-        page_type: pageType,
-      });
-      setPages(prev => [...prev, page]);
+    const page = await createPage(pageType, createPageParentId);
+    if (page) {
       onSelectPage(page.id);
       setShowCreatePageModal(false);
-    } catch (err) {
-      console.error('Failed to create page:', err);
     }
   };
 
   const handleWorkspaceUpdate = (updated: Workspace) => {
-    setWorkspaces(prev => prev.map(w => w.id === updated.id ? updated : w));
-    setSelectedWorkspace(updated);
-  };
-
-  const handleToggleFavorite = async (pageId: string) => {
-    try {
-      const updated = await api.toggleFavorite(pageId);
-      setPages(prev => prev.map(p => p.id === pageId ? { ...p, is_favorite: updated.is_favorite } : p));
-      if (activeSection === 'favorites') {
-        setFavorites(prev => prev.map(p => p.id === pageId ? updated : p).filter(p => p.is_favorite));
-      }
-    } catch (err) {
-      console.error('Failed to toggle favorite:', err);
-    }
-  };
-
-  const handleArchive = async (pageId: string) => {
-    try {
-      await api.archivePage(pageId);
-      setPages(prev => prev.filter(p => p.id !== pageId));
-      loadArchived(selectedWorkspace?.id || '');
-    } catch (err) {
-      console.error('Failed to archive page:', err);
-    }
-  };
-
-  const getCurrentPages = () => {
-    switch (activeSection) {
-      case 'favorites':
-        return favorites;
-      case 'recent':
-        return recent;
-      case 'archive':
-        return archived;
-      default:
-        return filteredPages;
-    }
+    selectWorkspace(updated);
   };
 
   if (loading) {
     return (
-      <div className="p-4 text-text-secondary text-sm">
-        <div className="space-y-2">
-          <div className="h-8 skeleton rounded"></div>
-          <div className="h-6 skeleton rounded w-3/4"></div>
-          <div className="h-6 skeleton rounded w-1/2"></div>
-        </div>
+      <div className="p-4">
+        <Spinner />
       </div>
     );
   }
 
+  const sections: { id: SidebarSectionType; label: string; icon: string }[] = [
+    { id: 'pages', label: 'Pages', icon: '📄' },
+    { id: 'favorites', label: 'Favorites', icon: '⭐' },
+    { id: 'recent', label: 'Recent', icon: '🕐' },
+    { id: 'archive', label: 'Archive', icon: '📦' },
+  ];
+
+  const sectionLabels: Record<SidebarSectionType, string> = {
+    pages: 'Pages',
+    favorites: 'Favorites',
+    recent: 'Recent',
+    archive: 'Archive',
+    trash: 'Trash',
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-2 border-b border-border">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-2xl">{selectedWorkspace?.icon || '📁'}</span>
-          <select
-            value={selectedWorkspace?.id || ''}
-            onChange={(e) => {
-              const ws = workspaces.find(w => w.id === e.target.value);
-              setSelectedWorkspace(ws || null);
-            }}
-            className="flex-1 px-2 py-1 text-sm border border-border rounded bg-surface font-medium"
-          >
-            {workspaces.map((ws) => (
-              <option key={ws.id} value={ws.id}>
-                {ws.name}
-              </option>
-            ))}
-          </select>
+    <UISidebar>
+      <SidebarHeader>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{currentWorkspace?.icon || '📁'}</span>
+            <select
+              value={currentWorkspace?.id || ''}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                const ws = workspaces.find(w => w.id === e.target.value);
+                if (ws) selectWorkspace(ws);
+              }}
+              className="flex-1 px-2 py-1 text-sm border border-border rounded bg-surface font-medium"
+            >
+              {workspaces.map((ws) => (
+                <option key={ws.id} value={ws.id}>
+                  {ws.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" fullWidth onClick={() => setShowSearchModal(true)}>
+              🔍 Search
+            </Button>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => setShowSettingsModal(true)}>
+              ⚙️
+            </Button>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => setShowShareModal(true)}>
+              🔗
+            </Button>
+          </div>
+
+          <Button variant="ghost" size="sm" fullWidth onClick={handleCreateWorkspaceClick}>
+            + New Workspace
+          </Button>
         </div>
+      </SidebarHeader>
 
-        <div className="flex gap-1">
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="flex-1 px-2 py-1 text-xs text-text-secondary hover:bg-hover rounded flex items-center justify-center gap-1"
-            title="Search (Ctrl+K)"
-          >
-            🔍 Search
-          </button>
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="flex-1 px-2 py-1 text-xs text-text-secondary hover:bg-hover rounded flex items-center justify-center gap-1"
-          >
-            ⚙️ Settings
-          </button>
-          <button
-            onClick={() => setShowShareModal(true)}
-            className="flex-1 px-2 py-1 text-xs text-text-secondary hover:bg-hover rounded flex items-center justify-center gap-1"
-          >
-            🔗 Share
-          </button>
-        </div>
-
-        <button
-          onClick={handleCreateWorkspaceClick}
-          className="mt-2 w-full px-2 py-1 text-sm text-text-secondary hover:bg-hover rounded text-left flex items-center gap-2"
-        >
-          <span className="text-lg">+</span>
-          <span>New Workspace</span>
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-4">
-        <div className="mb-2">
-          <input
-            type="text"
-            placeholder="Search pages... (Ctrl+K)"
+      <SidebarContent>
+        <div className="px-2 pb-2">
+          <Input
+            placeholder="Search pages..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-2 py-1 text-sm border border-border rounded bg-surface focus:outline-none focus:border-primary"
           />
         </div>
 
-        <div className="flex gap-1 mb-2">
-          <button
-            onClick={() => setActiveSection('pages')}
-            className={`flex-1 px-2 py-1 text-xs rounded ${
-              activeSection === 'pages' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-hover'
-            }`}
-          >
-            📄 Pages
-          </button>
-          <button
-            onClick={() => setActiveSection('favorites')}
-            className={`flex-1 px-2 py-1 text-xs rounded ${
-              activeSection === 'favorites' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-hover'
-            }`}
-          >
-            ⭐
-          </button>
-          <button
-            onClick={() => setActiveSection('recent')}
-            className={`flex-1 px-2 py-1 text-xs rounded ${
-              activeSection === 'recent' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-hover'
-            }`}
-          >
-            🕐
-          </button>
-          <button
-            onClick={() => setActiveSection('archive')}
-            className={`flex-1 px-2 py-1 text-xs rounded ${
-              activeSection === 'archive' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-hover'
-            }`}
-          >
-            📦
-          </button>
-        </div>
-        
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-text-secondary uppercase">
-            {activeSection === 'pages' ? 'Pages' : 
-             activeSection === 'favorites' ? 'Favorites' :
-             activeSection === 'recent' ? 'Recent' :
-             activeSection === 'archive' ? 'Archive' : 'Trash'}
-          </span>
-          {activeSection === 'pages' && (
-            <div className="flex gap-1">
-              <button
-                onClick={() => {
-                  setCreatePageParentId(undefined);
-                  setShowCreatePageModal(true);
-                }}
-                className="text-sm text-text-secondary hover:text-primary"
-                title="New Text Page"
+        <SidebarSection>
+          <SidebarGroup>
+            {sections.map((section) => (
+              <SidebarItem
+                key={section.id}
+                active={activeSection === section.id}
+                onClick={() => setActiveSection(section.id)}
+                icon={<span>{section.icon}</span>}
               >
-                📄+
-              </button>
-              <button
-                onClick={() => {
-                  setCreatePageParentId(undefined);
-                  setShowCreatePageModal(true);
-                }}
-                className="text-sm text-text-secondary hover:text-primary"
-                title="New Board"
-              >
-                🎨+
-              </button>
-            </div>
+                {section.label}
+              </SidebarItem>
+            ))}
+          </SidebarGroup>
+        </SidebarSection>
+
+        <SidebarSection>
+          <div className="flex items-center justify-between px-4 py-2">
+            <span className="text-xs font-semibold text-text-secondary uppercase">
+              {sectionLabels[activeSection]}
+            </span>
+            {activeSection === 'pages' && (
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={() => handleCreatePageClick()}>
+                  📄+
+                </Button>
+              </div>
+            )}
+          </div>
+          
+          {activeSection === 'pages' ? (
+            <SortablePageList
+              pages={filteredPages}
+              selectedPageId={selectedPageId}
+              onSelectPage={onSelectPage}
+              onReorder={reorderPages}
+              onCreatePage={handleCreatePageClick}
+              onToggleFavorite={toggleFavorite}
+              onArchive={archivePage}
+            />
+          ) : (
+            <PageTree
+              pages={getCurrentPages()}
+              selectedPageId={selectedPageId}
+              onSelectPage={onSelectPage}
+              onCreatePage={undefined}
+              onToggleFavorite={activeSection === 'favorites' ? toggleFavorite : undefined}
+              onArchive={undefined}
+              showActions={false}
+            />
           )}
-        </div>
-        
-        {activeSection === 'pages' ? (
-          <SortablePageList
-            pages={filteredPages}
-            selectedPageId={selectedPageId}
-            onSelectPage={onSelectPage}
-            onReorder={(newPages) => setPages(newPages)}
-            onCreatePage={handleCreatePageClick}
-            onToggleFavorite={handleToggleFavorite}
-            onArchive={handleArchive}
-          />
-        ) : (
-          <PageTree
-            pages={getCurrentPages()}
-            selectedPageId={selectedPageId}
-            onSelectPage={onSelectPage}
-            onCreatePage={undefined}
-            onToggleFavorite={activeSection === 'favorites' ? handleToggleFavorite : undefined}
-            onArchive={undefined}
-            showActions={false}
-          />
-        )}
-      </div>
+        </SidebarSection>
+      </SidebarContent>
 
       {showCreatePageModal && (
         <CreatePageModal
@@ -381,24 +237,24 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
         />
       )}
 
-      {showShareModal && selectedWorkspace && (
+      {showShareModal && currentWorkspace && (
         <ShareModal
-          workspaceId={selectedWorkspace.id}
+          workspaceId={currentWorkspace.id}
           onClose={() => setShowShareModal(false)}
         />
       )}
 
-      {showSettingsModal && selectedWorkspace && (
+      {showSettingsModal && currentWorkspace && (
         <SettingsModal
-          workspace={selectedWorkspace}
+          workspace={currentWorkspace}
           onClose={() => setShowSettingsModal(false)}
           onUpdate={handleWorkspaceUpdate}
         />
       )}
 
-      {showSearchModal && selectedWorkspace && (
+      {showSearchModal && currentWorkspace && (
         <SearchModal
-          workspaceId={selectedWorkspace.id}
+          workspaceId={currentWorkspace.id}
           onClose={() => setShowSearchModal(false)}
           onSelectPage={(pageId) => {
             onSelectPage(pageId);
@@ -407,7 +263,6 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
         />
       )}
 
-      {/* Create Workspace Modal */}
       {showCreateWorkspaceModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
@@ -435,13 +290,10 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
 
               <div>
                 <label className="block text-sm font-medium text-text mb-1.5">Workspace Name</label>
-                <input
-                  type="text"
+                <Input
                   value={createWorkspaceName}
                   onChange={(e) => setCreateWorkspaceName(e.target.value)}
                   placeholder="Enter workspace name"
-                  className="w-full px-3 py-2 border border-border rounded-md bg-surface text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && createWorkspaceName.trim()) {
                       handleCreateWorkspace();
@@ -452,23 +304,21 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowCreateWorkspaceModal(false)}
-                className="flex-1 px-4 py-2 text-text-secondary hover:bg-surface-hover rounded-md transition-colors"
-              >
+              <Button variant="secondary" fullWidth onClick={() => setShowCreateWorkspaceModal(false)}>
                 Cancel
-              </button>
-              <button
-                onClick={handleCreateWorkspace}
+              </Button>
+              <Button 
+                fullWidth 
+                onClick={handleCreateWorkspace} 
                 disabled={!createWorkspaceName.trim() || creatingWorkspace}
-                className="flex-1 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                loading={creatingWorkspace}
               >
-                {creatingWorkspace ? 'Creating...' : 'Create'}
-              </button>
+                Create
+              </Button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </UISidebar>
   );
 }

@@ -22,4 +22,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-editor': ['katex', 'yjs'],
+          'vendor-dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+          'vendor-player': ['react-player'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })
