@@ -18,6 +18,8 @@ import { CursorDisplay } from './CursorDisplay';
 import { TableOfContents } from './TableOfContents';
 import { ExportMenu } from './ExportMenu';
 import { VersionHistory } from './VersionHistory';
+import { TemplatesModal } from './TemplatesModal';
+import { PresentationMode } from './PresentationMode';
 
 interface BlockEditorProps {
   page: PageWithContent | null;
@@ -26,7 +28,7 @@ interface BlockEditorProps {
   onNavigate?: (pageId: string) => void;
 }
 
-type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image' | 'table' | 'video' | 'audio' | 'math' | 'toggle' | 'bookmark' | 'embed';
+type BlockType = 'text' | 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'todo' | 'quote' | 'code' | 'divider' | 'callout' | 'image' | 'table' | 'video' | 'audio' | 'math' | 'toggle' | 'bookmark' | 'embed' | 'footnote';
 
 interface Block {
   id: string;
@@ -83,7 +85,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
   const [blocks, setBlocks] = useState<Block[]>([{ id: '1', type: 'text', content: '' }]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; blockId?: string } | null>(null);
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; blockId: string } | null>(null);
-  const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number } | null>(null);
+  const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number; blockType?: string; blockLanguage?: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showCoverInput, setShowCoverInput] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState<string | null>(null);
@@ -92,6 +94,10 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [showLinkPopup, setShowLinkPopup] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
   const lastSavedContentRef = useRef<string>('');
   const isUpdatingRef = useRef(false);
   
@@ -491,6 +497,37 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       );
       updateBlocks(newBlocks);
     }
+
+    const handleMarkdownShortcut = () => {
+      const content = stripHtml(currentBlock.content);
+      const patterns: { pattern: RegExp; newType: BlockType }[] = [
+        { pattern: /^# $/, newType: 'heading1' },
+        { pattern: /^## $/, newType: 'heading2' },
+        { pattern: /^### $/, newType: 'heading3' },
+        { pattern: /^-$/, newType: 'bullet' },
+        { pattern: /^\* $/, newType: 'bullet' },
+        { pattern: /^\d+\. $/, newType: 'numbered' },
+        { pattern: /^\[\] $/, newType: 'todo' },
+        { pattern: /^> $/, newType: 'quote' },
+        { pattern: /^```$/, newType: 'code' },
+        { pattern: /^---$/, newType: 'divider' },
+      ];
+
+      for (const { pattern, newType } of patterns) {
+        if (pattern.test(content)) {
+          const newBlocks = blocks.map(b => 
+            b.id === blockId ? { ...b, type: newType, content: '' } : b
+          );
+          updateBlocks(newBlocks);
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (e.key === ' ' && !e.shiftKey) {
+      handleMarkdownShortcut();
+    }
   }, [blocks, updateBlocks]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, blockId?: string) => {
@@ -515,13 +552,25 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
         setFloatingToolbar(null);
         return;
       }
+
+      let blockType: string | undefined;
+      let blockLanguage: string | undefined;
+      
+      for (const block of blocks) {
+        const blockEl = document.getElementById(`block-${block.id}`);
+        if (blockEl && blockEl.contains(range.commonAncestorContainer)) {
+          blockType = block.type;
+          blockLanguage = block.properties?.language as string | undefined;
+          break;
+        }
+      }
       
       const rect = range.getBoundingClientRect();
-      setFloatingToolbar({ x: rect.left + rect.width / 2, y: rect.top - 10 });
+      setFloatingToolbar({ x: rect.left + rect.width / 2, y: rect.top - 10, blockType, blockLanguage });
     } else {
       setFloatingToolbar(null);
     }
-  }, []);
+  }, [blocks]);
 
   const handleSlashCommandSelect = useCallback((command: string) => {
     if (!slashMenu) return;
@@ -553,6 +602,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       case 'toggle': newType = 'toggle'; break;
       case 'bookmark': newType = 'bookmark'; break;
       case 'embed': newType = 'embed'; break;
+      case 'footnote': newType = 'footnote'; break;
       default: newType = 'text';
     }
 
@@ -561,7 +611,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       newBlock = { id: `${Date.now()}`, type: 'table', content: '3x3', children: [] };
     } else if (newType === 'toggle') {
       newBlock = { id: `${Date.now()}`, type: 'toggle', content: cleanContent || 'Toggle', children: [{ id: `${Date.now()}-child`, type: 'text', content: '' }], collapsed: false };
-    } else if (newType === 'video' || newType === 'audio' || newType === 'bookmark' || newType === 'math' || newType === 'embed') {
+    } else if (newType === 'video' || newType === 'audio' || newType === 'bookmark' || newType === 'math' || newType === 'embed' || newType === 'footnote') {
       newBlock = { id: `${Date.now()}`, type: newType, content: '' };
     } else {
       newBlock = { ...currentBlock, type: newType, content: cleanContent };
@@ -714,6 +764,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
       case 'toggle': return 'Toggle';
       case 'bookmark': return 'Paste URL to bookmark';
       case 'embed': return 'Paste URL to embed (YouTube, Twitter, etc.)';
+      case 'footnote': return 'Footnote content (e.g. Source: ...)';
       default: return "Type '/' for commands...";
     }
   };
@@ -864,6 +915,24 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
                 onBlur={(e) => handleBlockContentChange(block.id, e.target.value)}
               />
             )}
+          </div>
+        ) : block.type === 'footnote' ? (
+          <div className="w-full flex items-start gap-2">
+            <span className="text-xs text-text-secondary mt-1">¹</span>
+            <div
+              id={`block-${block.id}`}
+              contentEditable
+              data-placeholder={getBlockPlaceholder(block.type)}
+              className="flex-1 outline-none min-h-[1.5em] text-sm text-text-secondary italic"
+              onInput={(e) => {
+                const sel = window.getSelection();
+                const cursorPos = sel?.anchorOffset;
+                handleBlockContentChange(block.id, e.currentTarget.innerHTML, cursorPos);
+              }}
+              onKeyDown={(e) => handleKeyDown(e, block.id)}
+              dangerouslySetInnerHTML={{ __html: renderBlockContent(block) }}
+              suppressContentEditableWarning
+            />
           </div>
         ) : block.type === 'callout' ? (
           <div className="w-full bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex items-start gap-3">
@@ -1093,6 +1162,22 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
           />
 
           <button
+            onClick={() => setShowTemplates(true)}
+            className="px-2 py-1 hover:bg-hover rounded text-xs"
+            title="Templates"
+          >
+            📋 Templates
+          </button>
+
+          <button
+            onClick={() => setPresentationMode(true)}
+            className="px-2 py-1 hover:bg-hover rounded text-xs"
+            title="Presentation Mode"
+          >
+            🎤 Present
+          </button>
+
+          <button
             onClick={() => setShowExportMenu(true)}
             className="px-2 py-1 hover:bg-hover rounded text-xs"
             title="Export"
@@ -1156,7 +1241,7 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
           }
         }}
       >
-        {blocks.length === 0 || (blocks.length === 1 && isBlockEmpty(blocks[0].content)) ? (
+{blocks.length === 0 || (blocks.length === 1 && isBlockEmpty(blocks[0].content)) ? (
           <>
             {blocks.map((block, index) => renderBlock(block, index))}
             {blocks.length === 0 && (
@@ -1171,6 +1256,14 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
           blocks.map((block, index) => renderBlock(block, index))
         )}
       </div>
+
+      {presentationMode && (
+        <PresentationMode
+          blocks={blocks}
+          title={title}
+          onClose={() => setPresentationMode(false)}
+        />
+      )}
 
       {contextMenu && (
         <ContextMenu 
@@ -1196,8 +1289,12 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
           y={floatingToolbar.y} 
           onFormat={applyFormat}
           onClose={() => setFloatingToolbar(null)}
+          blockType={floatingToolbar.blockType}
+          blockLanguage={floatingToolbar.blockLanguage}
         />
       )}
+
+      <CursorDisplay presence={presence} currentUserId={undefined} />
 
       {showColorPicker && (
         <div 
@@ -1215,8 +1312,46 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {showLinkPopup && (
+        <div 
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-border p-3"
+          style={{ left: contextMenu?.x, top: (contextMenu?.y || 0) + 150 }}
+        >
+          <input
+            type="text"
+            placeholder="Paste link..."
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            className="w-48 px-2 py-1 border border-border rounded text-sm mb-2"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleContextAction('link');
+                setShowLinkPopup(false);
+              }
+            }}
+          />
+          <div className="flex gap-2">
+            <button 
+              onClick={() => {
+                handleContextAction('link');
+                setShowLinkPopup(false);
+              }}
+              className="px-2 py-1 bg-primary text-white rounded text-xs"
+            >
+              Add
+            </button>
+            <button 
+              onClick={() => setShowLinkPopup(false)}
+              className="px-2 py-1 bg-gray-200 rounded text-xs"
+            >
+              Cancel
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
       {showShortcuts && (
         <ShortcutHelpModal onClose={() => setShowShortcuts(false)} />
@@ -1236,6 +1371,21 @@ export function BlockEditor({ page, onSaveContent, onUpdatePage, onNavigate: _on
           onRestore={(version) => {
             console.log('Restore version:', version);
             setShowVersionHistory(false);
+          }}
+        />
+      )}
+
+      {showTemplates && (
+        <TemplatesModal
+          onClose={() => setShowTemplates(false)}
+          onSelect={(template) => {
+            const newBlocks = template.blocks.map((b, i) => ({
+              id: `block-${Date.now()}-${i}`,
+              type: b.type as BlockType,
+              content: b.content,
+            }));
+            setBlocks(newBlocks);
+            setShowTemplates(false);
           }}
         />
       )}

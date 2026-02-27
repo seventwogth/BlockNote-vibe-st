@@ -1,14 +1,19 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { CODE_LANGUAGES } from './CodeLanguages';
 
 interface FloatingToolbarProps {
   x: number;
   y: number;
   onFormat: (format: string) => void;
   onClose: () => void;
+  blockType?: string;
+  blockLanguage?: string;
+  onLanguageChange?: (language: string) => void;
 }
 
-export function FloatingToolbar({ x, y, onFormat, onClose }: FloatingToolbarProps) {
+export function FloatingToolbar({ x, y, onFormat, onClose, blockType, blockLanguage, onLanguageChange }: FloatingToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const [showLanguageSelect, setShowLanguageSelect] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -75,6 +80,39 @@ export function FloatingToolbar({ x, y, onFormat, onClose }: FloatingToolbarProp
           {btn.icon}
         </button>
       ))}
+
+      {blockType === 'code' && onLanguageChange && (
+        <>
+          <div className="w-px h-6 bg-border mx-1" />
+          <div className="relative">
+            <button
+              onClick={() => setShowLanguageSelect(!showLanguageSelect)}
+              className="h-8 px-2 flex items-center gap-1 rounded hover:bg-hover text-xs text-text-primary"
+            >
+              {blockLanguage || 'plaintext'}
+              <span>▼</span>
+            </button>
+            {showLanguageSelect && (
+              <div className="absolute top-full left-0 mt-1 w-40 max-h-48 overflow-y-auto bg-white border border-border rounded-lg shadow-lg z-50">
+                {CODE_LANGUAGES.map((lang) => (
+                  <button
+                    key={lang.value}
+                    onClick={() => {
+                      onLanguageChange(lang.value);
+                      setShowLanguageSelect(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left text-xs hover:bg-hover ${
+                      blockLanguage === lang.value ? 'bg-hover font-medium' : ''
+                    }`}
+                  >
+                    {lang.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

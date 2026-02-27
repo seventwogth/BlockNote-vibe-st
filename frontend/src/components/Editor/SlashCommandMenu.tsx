@@ -35,6 +35,7 @@ const commands: Command[] = [
   { label: 'Math', description: 'LaTeX math equation', icon: '∑', command: 'math', category: 'Advanced' },
   { label: 'Bookmark', description: 'Save a link as a bookmark', icon: '🔖', command: 'bookmark', category: 'Advanced' },
   { label: 'Embed', description: 'Embed content (YouTube, Twitter, Figma)', icon: '📐', command: 'embed', category: 'Media' },
+  { label: 'Footnote', description: 'Add a footnote reference', icon: '⁽¹⁾', command: 'footnote', category: 'Advanced' },
 ];
 
 const categories = ['Basic', 'Lists', 'Media', 'Advanced'];

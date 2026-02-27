@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { PageWithContent } from '../../types';
+import { BoardPresentation } from './BoardPresentation';
+import { LayersPanel } from './LayersPanel';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import * as Y from 'yjs';
 
@@ -20,6 +22,7 @@ interface BoardElement {
   width: number;
   height: number;
   content?: string;
+  label?: string;
   color: string;
   points?: { x: number; y: number }[];
   startPoint?: { x: number; y: number };
@@ -89,6 +92,8 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
   const [showGuides, setShowGuides] = useState(true);
   const [gridSize] = useState(20);
   const [laserMode, setLaserMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [showLayersPanel, setShowLayersPanel] = useState(false);
   const [laserPoints, setLaserPoints] = useState<{ x: number; y: number; color: string }[]>([]);
   const [clipboard, setClipboard] = useState<BoardElement[]>([]);
   const [guides, setGuides] = useState<{ x?: number; y?: number }[]>([]);
@@ -509,6 +514,27 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             );
             ctx.closePath();
             ctx.fill();
+
+            if (el.label) {
+              const midX = (el.startPoint.x + el.endPoint.x) / 2;
+              const midY = (el.startPoint.y + el.endPoint.y) / 2;
+              ctx.font = `${12 / scale}px sans-serif`;
+              ctx.fillStyle = '#374151';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              
+              const padding = 4 / scale;
+              const textWidth = ctx.measureText(el.label).width;
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(
+                midX - textWidth / 2 - padding,
+                midY - 8 / scale - padding,
+                textWidth + padding * 2,
+                16 / scale
+              );
+              ctx.fillStyle = '#374151';
+              ctx.fillText(el.label, midX, midY);
+            }
           }
           break;
 
@@ -542,6 +568,27 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             );
             ctx.closePath();
             ctx.fill();
+
+            if (el.label) {
+              const midX = (el.startPoint.x + el.endPoint.x) / 2;
+              const midY = (el.startPoint.y + el.endPoint.y) / 2;
+              ctx.font = `${12 / scale}px sans-serif`;
+              ctx.fillStyle = '#374151';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              
+              const padding = 4 / scale;
+              const textWidth = ctx.measureText(el.label).width;
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(
+                midX - textWidth / 2 - padding,
+                midY - 8 / scale - padding,
+                textWidth + padding * 2,
+                16 / scale
+              );
+              ctx.fillStyle = '#374151';
+              ctx.fillText(el.label, midX, midY);
+            }
           }
           break;
         }
@@ -1359,6 +1406,14 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           el.id === contextMenu.elementId ? { ...el, fontSize: size } : el
         ),
       });
+    } else if (action.startsWith('label-')) {
+      const label = action.replace('label-', '');
+      updateBoardState({
+        ...boardState,
+        elements: boardState.elements.map(el => 
+          el.id === contextMenu.elementId ? { ...el, label: label || undefined } : el
+        ),
+      });
     }
 
     setContextMenu(null);
@@ -1559,6 +1614,22 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             title="Export as PNG"
           >
             📷 PNG
+          </button>
+
+          <button
+            onClick={() => setPresentationMode(true)}
+            className="px-2 py-1 rounded text-xs hover:bg-hover"
+            title="Presentation Mode"
+          >
+            🎤 Present
+          </button>
+
+          <button
+            onClick={() => setShowLayersPanel(!showLayersPanel)}
+            className={`px-2 py-1 rounded text-xs ${showLayersPanel ? 'bg-primary text-white' : 'hover:bg-hover'}`}
+            title="Layers Panel"
+          >
+            📑 Layers
           </button>
 
           <button
@@ -1819,6 +1890,27 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
             >
               ↻ Rotate 45°
             </button>
+            {['arrow', 'connector'].includes(boardState.elements.find(e => e.id === contextMenu.elementId)?.type || '') && (
+              <>
+                <div className="h-px bg-border my-1" />
+                <div className="px-3 py-1 text-xs text-text-secondary">Label</div>
+                <button
+                  onClick={() => handleContextAction('label-')}
+                  className={`w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2 ${!boardState.elements.find(e => e.id === contextMenu.elementId)?.label ? 'bg-hover' : ''}`}
+                >
+                  (None)
+                </button>
+                {['Flow', 'Next →', 'Done ✓', 'Wait ⏳', 'Idea 💡'].map(label => (
+                  <button
+                    key={label}
+                    onClick={() => handleContextAction(`label-${label}`)}
+                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-hover flex items-center gap-2 ${boardState.elements.find(e => e.id === contextMenu.elementId)?.label === label ? 'bg-hover' : ''}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </>
+            )}
             <div className="h-px bg-border my-1" />
             <button
               onClick={() => handleContextAction('bringToFront')}
@@ -1849,6 +1941,45 @@ export function BoardEditor({ page, onSaveContent, onUpdatePage }: BoardEditorPr
           </div>
         )}
       </div>
+
+      {presentationMode && (
+        <BoardPresentation
+          elements={boardState.elements}
+          title={title}
+          onClose={() => setPresentationMode(false)}
+        />
+      )}
+
+      {showLayersPanel && (
+        <LayersPanel
+          elements={boardState.elements}
+          selectedIds={boardState.selectedIds}
+          onSelect={(id, multi) => {
+            if (multi) {
+              setBoardState(prev => ({
+                ...prev,
+                selectedIds: prev.selectedIds.includes(id)
+                  ? prev.selectedIds.filter(i => i !== id)
+                  : [...prev.selectedIds, id]
+              }));
+            } else {
+              setBoardState(prev => ({ ...prev, selectedIds: [id] }));
+            }
+          }}
+          onReorder={(newElements) => {
+            setBoardState(prev => ({ ...prev, elements: newElements as BoardElement[] }));
+          }}
+          onToggleLock={(id) => {
+            setBoardState(prev => ({
+              ...prev,
+              elements: prev.elements.map(el => 
+                el.id === id ? { ...el, locked: !el.locked } : el
+              )
+            }));
+          }}
+          onClose={() => setShowLayersPanel(false)}
+        />
+      )}
     </div>
   );
 }
