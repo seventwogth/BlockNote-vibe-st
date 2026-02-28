@@ -5,29 +5,28 @@ import { ToastContainer } from './components/Toast';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { usePage } from './hooks/usePage';
-import { Sidebar } from './components/Sidebar/Sidebar';
-import { Layout } from './ui/components/Layout/Layout';
-import { ToastContainer } from './ui/components/Toast/Toast';
-import { PageLoader } from './components/PageLoader';
-import { BlockEditor } from './components/Editor/BlockEditor';
-import { Page } from './types';
 import { api } from './services/api';
+import { Page, User } from './types';
+import { Button } from './ui/components/Button/Button';
+import { Input } from './ui/components/Input/Input';
 import { Spinner } from './ui/components/Spinner/Spinner';
-import React, { useState, useEffect, Suspense } from 'react';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
+const BlockEditor = lazy(() => import('./components/Editor/BlockEditor').then(m => ({ default: m.BlockEditor })));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <Spinner size="lg" />
+    </div>
+  );
 }
 
-function App() {
+export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
-  const [breadcrumb, setBreadcrumb] = useState<Page[]>([]);
   const { showToast } = useToast();
   useTheme();
 
@@ -42,31 +41,22 @@ function App() {
   const isFolder = page?.page_type === 'folder';
   const childPages = pages.filter(p => p.parent_id === selectedPageId);
 
-  const buildBreadcrumb = async (pageId: string | null) => {
+  const buildBreadcrumb = (pageId: string | null, allPages: Page[]) => {
     const crumbs: Page[] = [];
     let currentId = pageId;
     while (currentId) {
-      const currentPage = pages.find(p => p.id === currentId);
+      const currentPage = allPages.find(p => p.id === currentId);
       if (currentPage) {
         crumbs.unshift(currentPage);
-        currentPage.page_type === 'folder' ? currentPage.parent_id : null;
         currentId = currentPage.parent_id || null;
       } else {
         break;
       }
     }
-    setBreadcrumb(crumbs);
+    return crumbs;
   };
 
-  useEffect(() => {
-    if (selectedPageId && pages.length > 0) {
-      buildBreadcrumb(selectedPageId);
-    }
-  }, [selectedPageId, pages]);
-
-  const handleSelectPage = (pageId: string) => {
-    setSelectedPageId(pageId);
-  };
+  const currentBreadcrumb = selectedPageId ? buildBreadcrumb(selectedPageId, pages) : [];
 
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
@@ -109,8 +99,8 @@ function App() {
     await saveContent(content);
   }, [saveContent]);
 
-  const handleUpdatePage = useCallback(async (data: { title?: string; icon?: string }) => {
-    await updatePage(data);
+  const handleUpdatePage = useCallback(async (updates: Partial<Page>) => {
+    await updatePage(updates);
   }, [updatePage]);
 
   if (!token) {
@@ -145,12 +135,12 @@ function App() {
                 <button onClick={() => setSelectedPageId(null)} className="hover:text-primary">
                   Pages
                 </button>
-                {breadcrumb.map((crumb, idx) => (
+                {currentBreadcrumb.map((crumb, idx) => (
                   <React.Fragment key={crumb.id}>
                     <span>/</span>
                     <button 
                       onClick={() => setSelectedPageId(crumb.id)}
-                      className={`hover:text-primary ${idx === breadcrumb.length - 1 ? 'text-text font-medium' : ''}`}
+                      className={`hover:text-primary ${idx === currentBreadcrumb.length - 1 ? 'text-text font-medium' : ''}`}
                     >
                       {crumb.title}
                     </button>
@@ -220,73 +210,43 @@ function AuthScreen({ onLogin }: AuthScreenProps) {
         <div className="text-center mb-8">
           <div className="text-5xl mb-4">📝</div>
           <h1 className="text-3xl font-bold text-text mb-2">BlockNote</h1>
-          <p className="text-text-secondary">Your workspace for notes & boards</p>
+          <p className="text-text-secondary">Your personal knowledge base</p>
         </div>
 
-        <div className="bg-surface rounded-xl shadow-lg border border-border p-8">
-          <h2 className="text-xl font-semibold text-text text-center mb-6">
-            {isRegister ? 'Create Account' : 'Welcome Back'}
-          </h2>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isRegister && (
-              <Input
-                label="Full Name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                required
-              />
-            )}
-            
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {isRegister && (
             <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              required
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
-            
-            <Input
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              required
-            />
-            
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={loading}
-            >
-              {isRegister ? 'Create Account' : 'Sign In'}
-            </Button>
-          </form>
-          
-          <p className="mt-6 text-center text-sm text-text-secondary">
-            {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
-            <button
-              type="button"
-              onClick={() => setIsRegister(!isRegister)}
-              className="text-primary hover:underline font-medium"
-            >
-              {isRegister ? 'Sign In' : 'Sign Up'}
-            </button>
-          </p>
-        </div>
+          )}
+          <Input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Button type="submit" fullWidth loading={loading}>
+            {isRegister ? 'Sign Up' : 'Sign In'}
+          </Button>
+        </form>
 
-        <p className="mt-6 text-center text-xs text-text-secondary">
-          By continuing, you agree to our Terms of Service and Privacy Policy
-        </p>
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => setIsRegister(!isRegister)}
+            className="text-sm text-primary hover:underline"
+          >
+            {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
-
-export default App;
