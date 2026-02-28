@@ -232,8 +232,10 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name string `json:"name"`
-		Icon string `json:"icon"`
+		Name     string  `json:"name"`
+		Icon     string  `json:"icon"`
+		ParentID *string `json:"parent_id"`
+		Type     string  `json:"type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -245,6 +247,12 @@ func (h *WorkspaceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Icon != "" {
 		workspace.Icon = req.Icon
+	}
+	if req.ParentID != nil {
+		workspace.ParentID = req.ParentID
+	}
+	if req.Type != "" {
+		workspace.Type = req.Type
 	}
 
 	if err := h.workspaceUseCase.Update(r.Context(), workspace); err != nil {

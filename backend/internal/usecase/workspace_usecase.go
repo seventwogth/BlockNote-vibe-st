@@ -49,11 +49,17 @@ func NewWorkspaceUseCase(workspaceRepo repository.WorkspaceRepository, userRepo 
 
 func (u *workspaceUseCase) Create(ctx context.Context, userID string, req *entity.CreateWorkspaceRequest) (*entity.Workspace, error) {
 	now := time.Now()
+	wsType := req.Type
+	if wsType == "" {
+		wsType = entity.WorkspaceTypeWorkspace
+	}
 	workspace := &entity.Workspace{
 		ID:        generateUUID(),
 		Name:      req.Name,
 		Icon:      req.Icon,
 		OwnerID:   userID,
+		ParentID:  req.ParentID,
+		Type:      wsType,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

@@ -24,12 +24,16 @@ CREATE TABLE IF NOT EXISTS workspaces (
     icon VARCHAR(10),
     description TEXT,
     owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    parent_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
+    type VARCHAR(20) DEFAULT 'workspace' NOT NULL,
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_parent ON workspaces(parent_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_type ON workspaces(type);
 
 -- Workspace members
 CREATE TABLE IF NOT EXISTS workspace_members (

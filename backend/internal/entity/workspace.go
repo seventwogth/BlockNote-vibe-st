@@ -13,7 +13,7 @@ type Workspace struct {
 	OwnerID          string          `json:"owner_id"`
 	ParentID         *string         `json:"parent_id,omitempty"`
 	WorkspaceGroupID *string         `json:"workspace_group_id,omitempty"`
-	IsTextType       bool            `json:"is_text_type"`
+	Type             string          `json:"type"`
 	Position         int             `json:"position"`
 	Settings         json.RawMessage `json:"settings,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
@@ -54,7 +54,7 @@ type CreateWorkspaceRequest struct {
 	Description      string  `json:"description,omitempty"`
 	ParentID         *string `json:"parent_id,omitempty"`
 	WorkspaceGroupID *string `json:"workspace_group_id,omitempty"`
-	IsTextType       bool    `json:"is_text_type"`
+	Type             string  `json:"type"`
 }
 
 type CreateWorkspaceGroupRequest struct {
@@ -68,7 +68,7 @@ type UpdateWorkspaceRequest struct {
 	Description      *string `json:"description,omitempty"`
 	ParentID         *string `json:"parent_id,omitempty"`
 	WorkspaceGroupID *string `json:"workspace_group_id,omitempty"`
-	IsTextType       *bool   `json:"is_text_type,omitempty"`
+	Type             *string `json:"type,omitempty"`
 	Position         *int    `json:"position,omitempty"`
 }
 
@@ -92,4 +92,9 @@ const (
 	RoleAdmin  = "admin"
 	RoleEditor = "editor"
 	RoleViewer = "viewer"
+)
+
+const (
+	WorkspaceTypeWorkspace = "workspace"
+	WorkspaceTypeGroup     = "group"
 )

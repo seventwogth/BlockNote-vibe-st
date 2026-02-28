@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Workspace, WorkspaceGroup, Page } from '../../types';
+import { Workspace, Page } from '../../types';
 import { api } from '../../services/api';
 
 interface SidebarProps {
@@ -22,7 +22,6 @@ export function CollapsibleSidebar({
   isCollapsed,
   onToggleCollapse 
 }: CollapsibleSidebarProps) {
-  const [workspaceGroups, setWorkspaceGroups] = useState<WorkspaceGroup[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
@@ -33,12 +32,12 @@ export function CollapsibleSidebar({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSection, setActiveSection] = useState<SidebarSection>('pages');
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [createWorkspaceName, setCreateWorkspaceName] = useState('');
   const [createWorkspaceIcon, setCreateWorkspaceIcon] = useState('📁');
+  const [createWorkspaceType, setCreateWorkspaceType] = useState<'workspace' | 'group'>('workspace');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | undefined>(undefined);
 
@@ -67,7 +66,6 @@ export function CollapsibleSidebar({
   const loadWorkspaces = async () => {
     try {
       const data = await api.getWorkspaces();
-      setWorkspaceGroups(data.groups || []);
       const ws = data.workspaces || [];
       setWorkspaces(ws);
       const rootWorkspaces = ws.filter((w: Workspace) => !w.parent_id);
@@ -120,6 +118,7 @@ export function CollapsibleSidebar({
   const handleCreateWorkspaceClick = () => {
     setCreateWorkspaceName('');
     setCreateWorkspaceIcon('📁');
+    setCreateWorkspaceType('workspace');
     setShowCreateWorkspaceModal(true);
   };
 
@@ -131,11 +130,15 @@ export function CollapsibleSidebar({
       const workspace = await api.createWorkspace({ 
         name: createWorkspaceName.trim(),
         icon: createWorkspaceIcon,
-        is_text_type: false,
+        type: createWorkspaceType,
+        parent_id: createParentId,
       });
       setWorkspaces(prev => [...prev, workspace]);
-      setSelectedWorkspace(workspace);
+      if (createWorkspaceType === 'workspace') {
+        setSelectedWorkspace(workspace);
+      }
       setShowCreateWorkspaceModal(false);
+      setCreateParentId(undefined);
     } catch (err) {
       console.error('Failed to create workspace:', err);
     } finally {
@@ -148,23 +151,16 @@ export function CollapsibleSidebar({
     if (!name) return;
 
     try {
-      const group = await api.createWorkspaceGroup({ name });
-      setWorkspaceGroups(prev => [...prev, group]);
+      const group = await api.createWorkspace({ 
+        name, 
+        icon: '📁',
+        type: 'group',
+        parent_id: createParentId,
+      });
+      setWorkspaces(prev => [...prev, group]);
     } catch (err) {
       console.error('Failed to create group:', err);
     }
-  };
-
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
   };
 
   const toggleWorkspaceExpand = (workspaceId: string) => {
@@ -360,11 +356,9 @@ export function CollapsibleSidebar({
               }}
               className="flex-1 px-2 py-1 text-sm border border-border rounded bg-surface font-medium"
             >
-              <optgroup label="Workspaces">
-                {workspaces.filter(w => !w.parent_id).map((ws) => (
-                  <option key={ws.id} value={ws.id}>{ws.icon || '📁'} {ws.name}</option>
-                ))}
-              </optgroup>
+              {workspaces.filter(w => !w.parent_id).map((ws) => (
+                <WorkspaceOption key={ws.id} workspace={ws} workspaces={workspaces} level={0} />
+              ))}
             </select>
           </div>
           
@@ -389,42 +383,7 @@ export function CollapsibleSidebar({
 
       {!isCollapsed && (
         <div className="flex-1 overflow-y-auto px-2 pb-4">
-          {workspaceGroups.length > 0 && (
-            <div className="mb-2">
-              {workspaceGroups.map((group) => (
-                <div key={group.id} className="mb-1">
-                  <div
-                    className="flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-hover rounded-sm"
-                    onClick={() => toggleGroup(group.id)}
-                  >
-                    <span className="text-xs text-text-secondary">
-                      {expandedGroups.has(group.id) ? '▼' : '▶'}
-                    </span>
-                    <span className="text-sm font-medium">{group.icon || '📁'}</span>
-                    <span className="text-sm font-semibold">{group.name}</span>
-                  </div>
-                  
-                  {expandedGroups.has(group.id) && (
-                    <div className="ml-2">
-                      {group.workspaces?.map((workspace) => (
-                        <CollapsibleWorkspaceItem
-                          key={workspace.id}
-                          workspace={workspace}
-                          selectedWorkspace={selectedWorkspace}
-                          onSelectWorkspace={setSelectedWorkspace}
-                          expandedWorkspaces={expandedWorkspaces}
-                          onToggleExpand={toggleWorkspaceExpand}
-                          level={1}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {workspaces.filter(w => !w.parent_id && !w.workspace_group_id).map((workspace) => (
+          {workspaces.filter(w => !w.parent_id).map((workspace) => (
             <CollapsibleWorkspaceItem
               key={workspace.id}
               workspace={workspace}
@@ -571,6 +530,34 @@ export function CollapsibleSidebar({
             
             <div className="space-y-4">
               <div>
+                <label className="block text-sm font-medium text-text mb-2">Type</label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setCreateWorkspaceType('workspace')}
+                    className={`flex-1 p-3 rounded-lg border transition-colors flex flex-col items-center gap-2 ${
+                      createWorkspaceType === 'workspace'
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <span className="text-2xl">📄</span>
+                    <span className="text-sm font-medium">Workspace</span>
+                  </button>
+                  <button
+                    onClick={() => setCreateWorkspaceType('group')}
+                    className={`flex-1 p-3 rounded-lg border transition-colors flex flex-col items-center gap-2 ${
+                      createWorkspaceType === 'group'
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <span className="text-2xl">📁</span>
+                    <span className="text-sm font-medium">Group</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-text mb-2">Icon</label>
                 <div className="flex flex-wrap gap-2">
                   {['📁', '💼', '📚', '🎯', '🚀', '🌟', '💡', '🎨', '🏠', '🌈'].map((icon) => (
@@ -629,6 +616,34 @@ export function CollapsibleSidebar({
   );
 }
 
+interface WorkspaceOptionProps {
+  workspace: Workspace;
+  workspaces: Workspace[];
+  level: number;
+}
+
+function WorkspaceOption({ workspace, workspaces, level }: WorkspaceOptionProps) {
+  const children = workspaces.filter(w => w.parent_id === workspace.id);
+  const indent = '\u00A0\u00A0'.repeat(level);
+  const label = workspace.type === 'group' ? '📁 ' : '📄 ';
+  
+  return (
+    <>
+      <option key={workspace.id} value={workspace.id}>
+        {indent}{label}{workspace.name}
+      </option>
+      {children.map(child => (
+        <WorkspaceOption 
+          key={child.id} 
+          workspace={child} 
+          workspaces={workspaces} 
+          level={level + 1} 
+        />
+      ))}
+    </>
+  );
+}
+
 interface CollapsibleWorkspaceItemProps {
   workspace: Workspace;
   selectedWorkspace: Workspace | null;
@@ -649,6 +664,7 @@ function CollapsibleWorkspaceItem({
   const isSelected = selectedWorkspace?.id === workspace.id;
   const hasChildren = workspace.children && workspace.children.length > 0;
   const isExpanded = expandedWorkspaces.has(workspace.id);
+  const isGroup = workspace.type === 'group';
 
   return (
     <div>
@@ -659,7 +675,7 @@ function CollapsibleWorkspaceItem({
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={() => onSelectWorkspace(workspace)}
       >
-        {workspace.is_text_type && (
+        {isGroup && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -670,13 +686,13 @@ function CollapsibleWorkspaceItem({
             {isExpanded ? '▼' : '▶'}
           </button>
         )}
-        {!workspace.is_text_type && <div className="w-4" />}
+        {!isGroup && <div className="w-4" />}
         
         <span className="text-sm">{workspace.icon || '📁'}</span>
         <span className="text-sm truncate">{workspace.name}</span>
       </div>
       
-      {workspace.is_text_type && isExpanded && hasChildren && (
+      {isGroup && isExpanded && hasChildren && (
         <div>
           {workspace.children?.map((child) => (
             <CollapsibleWorkspaceItem

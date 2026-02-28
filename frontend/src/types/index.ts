@@ -7,6 +7,8 @@ export interface User {
   updated_at: string;
 }
 
+export type WorkspaceType = 'workspace' | 'group';
+
 export interface Workspace {
   id: string;
   name: string;
@@ -15,7 +17,7 @@ export interface Workspace {
   owner_id: string;
   parent_id?: string;
   workspace_group_id?: string;
-  is_text_type: boolean;
+  type: WorkspaceType;
   position: number;
   settings?: WorkspaceSettings;
   created_at: string;
@@ -127,7 +129,7 @@ export interface CreateWorkspaceRequest {
   description?: string;
   parent_id?: string;
   workspace_group_id?: string;
-  is_text_type: boolean;
+  type?: WorkspaceType;
 }
 
 export interface CreateWorkspaceGroupRequest {
@@ -144,6 +146,8 @@ export interface UpdateWorkspaceRequest {
   name?: string;
   icon?: string;
   description?: string;
+  parent_id?: string;
+  type?: WorkspaceType;
 }
 
 export interface CreatePageRequest {

@@ -114,9 +114,9 @@ export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
     setState(prev => ({ ...prev, currentWorkspace: workspace }));
   }, []);
 
-  const createWorkspace = useCallback(async (name: string, icon?: string) => {
+  const createWorkspace = useCallback(async (name: string, icon?: string, type: 'workspace' | 'group' = 'workspace', parentId?: string) => {
     try {
-      const workspace = await api.createWorkspace({ name, icon, is_text_type: false });
+      const workspace = await api.createWorkspace({ name, icon, type, parent_id: parentId });
       setState(prev => ({
         ...prev,
         workspaces: { ...prev.workspaces, workspaces: [...(prev.workspaces.workspaces || []), workspace] },

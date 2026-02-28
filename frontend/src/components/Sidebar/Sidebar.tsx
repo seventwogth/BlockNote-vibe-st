@@ -35,6 +35,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [createWorkspaceName, setCreateWorkspaceName] = useState('');
   const [createWorkspaceIcon, setCreateWorkspaceIcon] = useState('📁');
+  const [createWorkspaceType, setCreateWorkspaceType] = useState<'workspace' | 'group'>('workspace');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createPageParentId, setCreatePageParentId] = useState<string | undefined>(undefined);
 
@@ -71,6 +72,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const handleCreateWorkspaceClick = () => {
     setCreateWorkspaceName('');
     setCreateWorkspaceIcon('📁');
+    setCreateWorkspaceType('workspace');
     setShowCreateWorkspaceModal(true);
   };
 
@@ -79,7 +81,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
 
     setCreatingWorkspace(true);
     try {
-      await createWorkspace(createWorkspaceName.trim(), createWorkspaceIcon);
+      await createWorkspace(createWorkspaceName.trim(), createWorkspaceIcon, createWorkspaceType);
       setShowCreateWorkspaceModal(false);
     } catch (err) {
       console.error('Failed to create workspace:', err);
@@ -269,6 +271,36 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
             <h2 className="text-lg font-semibold text-text mb-4">Create Workspace</h2>
             
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">Type</label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreateWorkspaceType('workspace')}
+                    className={`flex-1 p-3 rounded-lg border transition-colors flex flex-col items-center gap-2 ${
+                      createWorkspaceType === 'workspace'
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <span className="text-2xl">📄</span>
+                    <span className="text-sm font-medium">Workspace</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateWorkspaceType('group')}
+                    className={`flex-1 p-3 rounded-lg border transition-colors flex flex-col items-center gap-2 ${
+                      createWorkspaceType === 'group'
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <span className="text-2xl">📁</span>
+                    <span className="text-sm font-medium">Group</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-text mb-2">Icon</label>
                 <div className="flex flex-wrap gap-2">

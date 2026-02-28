@@ -29,26 +29,30 @@ func NewWorkspaceRepository(db *sql.DB) WorkspaceRepository {
 
 func (r *workspaceRepository) Create(ctx context.Context, workspace *entity.Workspace) error {
 	query := `
-		INSERT INTO workspaces (id, name, icon, description, owner_id, settings, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO workspaces (id, name, icon, description, owner_id, parent_id, type, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 	settings, _ := json.Marshal(entity.WorkspaceSettings{})
+	wsType := workspace.Type
+	if wsType == "" {
+		wsType = entity.WorkspaceTypeWorkspace
+	}
 	_, err := r.db.ExecContext(ctx, query,
-		workspace.ID, workspace.Name, workspace.Icon, workspace.Description, workspace.OwnerID, settings, workspace.CreatedAt, workspace.UpdatedAt,
+		workspace.ID, workspace.Name, workspace.Icon, workspace.Description, workspace.OwnerID, workspace.ParentID, wsType, settings, workspace.CreatedAt, workspace.UpdatedAt,
 	)
 	return err
 }
 
 func (r *workspaceRepository) GetByID(ctx context.Context, id string) (*entity.Workspace, error) {
 	query := `
-		SELECT id, COALESCE(name, ''), COALESCE(icon, ''), COALESCE(description, ''), owner_id, COALESCE(settings, '{}'), created_at, updated_at
+		SELECT id, COALESCE(name, ''), COALESCE(icon, ''), COALESCE(description, ''), owner_id, parent_id, COALESCE(type, 'workspace'), COALESCE(settings, '{}'), created_at, updated_at
 		FROM workspaces WHERE id = $1
 	`
 	workspace := &entity.Workspace{}
 	var settings []byte
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&workspace.ID, &workspace.Name, &workspace.Icon, &workspace.Description, &workspace.OwnerID, &settings, &workspace.CreatedAt, &workspace.UpdatedAt,
+		&workspace.ID, &workspace.Name, &workspace.Icon, &workspace.Description, &workspace.OwnerID, &workspace.ParentID, &workspace.Type, &settings, &workspace.CreatedAt, &workspace.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -59,11 +63,11 @@ func (r *workspaceRepository) GetByID(ctx context.Context, id string) (*entity.W
 
 func (r *workspaceRepository) GetByUserID(ctx context.Context, userID string) ([]entity.Workspace, error) {
 	query := `
-		SELECT w.id, COALESCE(w.name, ''), COALESCE(w.icon, ''), COALESCE(w.description, ''), w.owner_id, COALESCE(w.settings, '{}'), w.created_at, w.updated_at
+		SELECT w.id, COALESCE(w.name, ''), COALESCE(w.icon, ''), COALESCE(w.description, ''), w.owner_id, w.parent_id, COALESCE(w.type, 'workspace'), COALESCE(w.settings, '{}'), w.created_at, w.updated_at
 		FROM workspaces w
 		LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
 		WHERE w.owner_id = $1 OR wm.user_id = $1
-		ORDER BY w.updated_at DESC
+		ORDER BY w.position, w.updated_at DESC
 	`
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -75,22 +79,54 @@ func (r *workspaceRepository) GetByUserID(ctx context.Context, userID string) ([
 	for rows.Next() {
 		var w entity.Workspace
 		var settings []byte
-		if err := rows.Scan(&w.ID, &w.Name, &w.Icon, &w.Description, &w.OwnerID, &settings, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Icon, &w.Description, &w.OwnerID, &w.ParentID, &w.Type, &settings, &w.CreatedAt, &w.UpdatedAt); err != nil {
 			return nil, err
 		}
 		w.Settings = json.RawMessage(settings)
 		workspaces = append(workspaces, w)
 	}
+
+	workspaces = buildWorkspaceTree(workspaces)
 	return workspaces, nil
+}
+
+func buildWorkspaceTree(workspaces []entity.Workspace) []entity.Workspace {
+	workspaceMap := make(map[string]*entity.Workspace)
+	var rootWorkspaces []entity.Workspace
+
+	for i := range workspaces {
+		ws := &workspaces[i]
+		workspaceMap[ws.ID] = ws
+	}
+
+	for i := range workspaces {
+		ws := &workspaces[i]
+		if ws.ParentID != nil && *ws.ParentID != "" {
+			parentID := *ws.ParentID
+			if parent, ok := workspaceMap[parentID]; ok {
+				parent.Children = append(parent.Children, *ws)
+			} else {
+				rootWorkspaces = append(rootWorkspaces, *ws)
+			}
+		} else {
+			rootWorkspaces = append(rootWorkspaces, *ws)
+		}
+	}
+
+	return rootWorkspaces
 }
 
 func (r *workspaceRepository) Update(ctx context.Context, workspace *entity.Workspace) error {
 	query := `
-		UPDATE workspaces SET name = $2, icon = $3, description = $4, settings = $5, updated_at = $6
+		UPDATE workspaces SET name = $2, icon = $3, description = $4, parent_id = $5, type = $6, settings = $7, updated_at = $8
 		WHERE id = $1
 	`
 	settings, _ := json.Marshal(workspace.Settings)
-	_, err := r.db.ExecContext(ctx, query, workspace.ID, workspace.Name, workspace.Icon, workspace.Description, settings, workspace.UpdatedAt)
+	wsType := workspace.Type
+	if wsType == "" {
+		wsType = entity.WorkspaceTypeWorkspace
+	}
+	_, err := r.db.ExecContext(ctx, query, workspace.ID, workspace.Name, workspace.Icon, workspace.Description, workspace.ParentID, wsType, settings, workspace.UpdatedAt)
 	return err
 }
 
