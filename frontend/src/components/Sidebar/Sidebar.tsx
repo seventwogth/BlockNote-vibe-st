@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { PageTree } from './PageTree';
-import { SortablePageList } from './SortablePageList';
 import { Workspace } from '../../types';
 import { ShareModal } from '../ShareModal';
 import { SettingsModal } from '../SettingsModal';
@@ -23,11 +22,12 @@ interface SidebarProps {
   selectedPageId?: string;
   onSelectPage: (pageId: string) => void;
   token?: string | null;
+  onWorkspaceSelect?: (workspaceId: string) => void;
 }
 
 type SidebarSectionType = 'pages' | 'favorites' | 'recent' | 'archive' | 'trash';
 
-export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
+export function Sidebar({ selectedPageId, onSelectPage, token, onWorkspaceSelect }: SidebarProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
@@ -35,9 +35,9 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [createWorkspaceName, setCreateWorkspaceName] = useState('');
   const [createWorkspaceIcon, setCreateWorkspaceIcon] = useState('📁');
-  const [createWorkspaceType, setCreateWorkspaceType] = useState<'workspace' | 'group'>('workspace');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createPageParentId, setCreatePageParentId] = useState<string | undefined>(undefined);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   const {
     workspaceList,
@@ -54,7 +54,6 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
     toggleFavorite,
     archivePage,
     getCurrentPages,
-    reorderPages,
   } = useSidebarViewModel({ token: token || null });
 
   useEffect(() => {
@@ -72,7 +71,6 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   const handleCreateWorkspaceClick = () => {
     setCreateWorkspaceName('');
     setCreateWorkspaceIcon('📁');
-    setCreateWorkspaceType('workspace');
     setShowCreateWorkspaceModal(true);
   };
 
@@ -81,7 +79,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
 
     setCreatingWorkspace(true);
     try {
-      await createWorkspace(createWorkspaceName.trim(), createWorkspaceIcon, createWorkspaceType);
+      await createWorkspace(createWorkspaceName.trim(), createWorkspaceIcon);
       setShowCreateWorkspaceModal(false);
     } catch (err) {
       console.error('Failed to create workspace:', err);
@@ -91,7 +89,7 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
   };
 
   const handleCreatePageClick = (parentId?: string) => {
-    setCreatePageParentId(parentId);
+    setCreatePageParentId(parentId || undefined);
     setShowCreatePageModal(true);
   };
 
@@ -101,6 +99,26 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
       onSelectPage(page.id);
       setShowCreatePageModal(false);
     }
+  };
+
+  const handleCreateFolder = async () => {
+    const page = await createPage('folder', createPageParentId);
+    if (page) {
+      setExpandedFolders(prev => new Set(prev).add(page.id));
+      setShowCreatePageModal(false);
+    }
+  };
+
+  const toggleFolderExpand = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
   };
 
   const handleWorkspaceUpdate = (updated: Workspace) => {
@@ -140,7 +158,10 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
               value={currentWorkspace?.id || ''}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                 const ws = workspaceList.find(w => w.id === e.target.value);
-                if (ws) selectWorkspace(ws);
+                if (ws) {
+                  selectWorkspace(ws);
+                  onWorkspaceSelect?.(ws.id);
+                }
               }}
               className="flex-1 px-2 py-1 text-sm border border-border rounded bg-surface font-medium"
             >
@@ -209,11 +230,19 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
           </div>
           
           {activeSection === 'pages' ? (
-            <SortablePageList
+            <PageTree
               pages={filteredPages}
               selectedPageId={selectedPageId}
-              onSelectPage={onSelectPage}
-              onReorder={reorderPages}
+              onSelectPage={(pageId) => {
+                const page = filteredPages.find(p => p.id === pageId);
+                if (page?.page_type === 'folder') {
+                  onSelectPage(pageId);
+                } else {
+                  onSelectPage(pageId);
+                }
+              }}
+              expandedFolders={expandedFolders}
+              onToggleExpand={toggleFolderExpand}
               onCreatePage={handleCreatePageClick}
               onToggleFavorite={toggleFavorite}
               onArchive={archivePage}
@@ -222,7 +251,16 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
             <PageTree
               pages={getCurrentPages()}
               selectedPageId={selectedPageId}
-              onSelectPage={onSelectPage}
+              onSelectPage={(pageId) => {
+                const page = getCurrentPages().find(p => p.id === pageId);
+                if (page?.page_type === 'folder') {
+                  onSelectPage(pageId);
+                } else {
+                  onSelectPage(pageId);
+                }
+              }}
+              expandedFolders={expandedFolders}
+              onToggleExpand={toggleFolderExpand}
               onCreatePage={undefined}
               onToggleFavorite={activeSection === 'favorites' ? toggleFavorite : undefined}
               onArchive={undefined}
@@ -235,7 +273,8 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
       {showCreatePageModal && (
         <CreatePageModal
           onClose={() => setShowCreatePageModal(false)}
-          onCreate={handleCreatePage}
+          onCreatePage={handleCreatePage}
+          onCreateFolder={handleCreateFolder}
         />
       )}
 
@@ -271,36 +310,6 @@ export function Sidebar({ selectedPageId, onSelectPage, token }: SidebarProps) {
             <h2 className="text-lg font-semibold text-text mb-4">Create Workspace</h2>
             
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-text mb-2">Type</label>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCreateWorkspaceType('workspace')}
-                    className={`flex-1 p-3 rounded-lg border transition-colors flex flex-col items-center gap-2 ${
-                      createWorkspaceType === 'workspace'
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <span className="text-2xl">📄</span>
-                    <span className="text-sm font-medium">Workspace</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCreateWorkspaceType('group')}
-                    className={`flex-1 p-3 rounded-lg border transition-colors flex flex-col items-center gap-2 ${
-                      createWorkspaceType === 'group'
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <span className="text-2xl">📁</span>
-                    <span className="text-sm font-medium">Group</span>
-                  </button>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-text mb-2">Icon</label>
                 <div className="flex flex-wrap gap-2">

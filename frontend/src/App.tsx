@@ -3,32 +3,70 @@ import { Layout } from './components/Layout/Layout';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { ToastContainer } from './components/Toast';
 import { ToastProvider, useToast } from './hooks/useToast';
-import { useTheme } from './hooks/useTheme.tsx';
+import { useTheme } from './hooks/useTheme';
 import { usePage } from './hooks/usePage';
+import { Sidebar } from './components/Sidebar/Sidebar';
+import { Layout } from './ui/components/Layout/Layout';
+import { ToastContainer } from './ui/components/Toast/Toast';
+import { PageLoader } from './components/PageLoader';
+import { BlockEditor } from './components/Editor/BlockEditor';
+import { Page } from './types';
 import { api } from './services/api';
-import { User } from './types';
-import { Button } from './ui/components/Button/Button';
-import { Input } from './ui/components/Input/Input';
 import { Spinner } from './ui/components/Spinner/Spinner';
+import React, { useState, useEffect, Suspense } from 'react';
 
-const BlockEditor = lazy(() => import('./components/Editor/BlockEditor').then(m => ({ default: m.BlockEditor })));
-
-function PageLoader() {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <Spinner size="lg" />
-    </div>
-  );
+interface User {
+  id: string;
+  name: string;
+  email: string;
 }
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [breadcrumb, setBreadcrumb] = useState<Page[]>([]);
   const { showToast } = useToast();
   useTheme();
 
   const { page, loading, updatePage, saveContent } = usePage(selectedPageId);
+
+  useEffect(() => {
+    if (selectedWorkspaceId) {
+      api.getWorkspacePages(selectedWorkspaceId).then(setPages).catch(console.error);
+    }
+  }, [selectedWorkspaceId]);
+
+  const isFolder = page?.page_type === 'folder';
+  const childPages = pages.filter(p => p.parent_id === selectedPageId);
+
+  const buildBreadcrumb = async (pageId: string | null) => {
+    const crumbs: Page[] = [];
+    let currentId = pageId;
+    while (currentId) {
+      const currentPage = pages.find(p => p.id === currentId);
+      if (currentPage) {
+        crumbs.unshift(currentPage);
+        currentPage.page_type === 'folder' ? currentPage.parent_id : null;
+        currentId = currentPage.parent_id || null;
+      } else {
+        break;
+      }
+    }
+    setBreadcrumb(crumbs);
+  };
+
+  useEffect(() => {
+    if (selectedPageId && pages.length > 0) {
+      buildBreadcrumb(selectedPageId);
+    }
+  }, [selectedPageId, pages]);
+
+  const handleSelectPage = (pageId: string) => {
+    setSelectedPageId(pageId);
+  };
 
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
@@ -92,6 +130,7 @@ function App() {
             selectedPageId={selectedPageId || undefined}
             onSelectPage={handleSelectPage}
             token={token}
+            onWorkspaceSelect={(wsId) => setSelectedWorkspaceId(wsId)}
           />
         }
         user={user ? { name: user.name, email: user.email } : undefined}
@@ -100,6 +139,45 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           {loading ? (
             <PageLoader />
+          ) : isFolder ? (
+            <div className="p-8 max-w-4xl mx-auto">
+              <div className="flex items-center gap-2 text-sm text-text-secondary mb-6">
+                <button onClick={() => setSelectedPageId(null)} className="hover:text-primary">
+                  Pages
+                </button>
+                {breadcrumb.map((crumb, idx) => (
+                  <React.Fragment key={crumb.id}>
+                    <span>/</span>
+                    <button 
+                      onClick={() => setSelectedPageId(crumb.id)}
+                      className={`hover:text-primary ${idx === breadcrumb.length - 1 ? 'text-text font-medium' : ''}`}
+                    >
+                      {crumb.title}
+                    </button>
+                  </React.Fragment>
+                ))}
+              </div>
+              <h1 className="text-3xl font-bold text-text mb-6 flex items-center gap-3">
+                <span>{page?.icon || '📁'}</span>
+                <span>{page?.title}</span>
+              </h1>
+              <div className="space-y-2">
+                {childPages.length === 0 ? (
+                  <p className="text-text-secondary">This folder is empty</p>
+                ) : (
+                  childPages.map(child => (
+                    <button
+                      key={child.id}
+                      onClick={() => handleSelectPage(child.id)}
+                      className="w-full p-4 text-left rounded-lg border border-border hover:border-primary hover:bg-hover transition-colors flex items-center gap-3"
+                    >
+                      <span className="text-xl">{child.page_type === 'folder' ? '📁' : '📄'}</span>
+                      <span className="font-medium">{child.title}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           ) : (
             <BlockEditor
               page={page}

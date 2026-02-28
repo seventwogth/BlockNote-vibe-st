@@ -130,7 +130,7 @@ export function useSidebarViewModel({ token }: UseSidebarViewModelProps) {
     }
   }, [showToast]);
 
-  const createPage = useCallback(async (pageType: 'text', parentId?: string) => {
+  const createPage = useCallback(async (pageType: 'text' | 'folder', parentId?: string) => {
     if (!state.currentWorkspace) return;
 
     try {

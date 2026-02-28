@@ -82,8 +82,8 @@ type PageVersion struct {
 }
 
 const (
-	PageTypeText  = "text"
-	PageTypeBoard = "board"
+	PageTypeText   = "text"
+	PageTypeFolder = "folder"
 )
 
 func (p *Page) SetTags(tags []string) {

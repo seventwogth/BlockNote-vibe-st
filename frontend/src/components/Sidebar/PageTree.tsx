@@ -11,6 +11,8 @@ interface PageTreeProps {
   onDeletePage?: (pageId: string) => void;
   onToggleFavorite?: (pageId: string) => void;
   onArchive?: (pageId: string) => void;
+  expandedFolders?: Set<string>;
+  onToggleExpand?: (folderId: string) => void;
   level?: number;
   showActions?: boolean;
 }
@@ -23,21 +25,28 @@ export function PageTree({
   onDeletePage,
   onToggleFavorite,
   onArchive,
+  expandedFolders = new Set(),
+  onToggleExpand,
   level = 0,
   showActions = true
 }: PageTreeProps) {
+  const rootPages = pages.filter(p => !p.parent_id);
+  
   return (
     <div className="select-none">
-      {pages.map((page) => (
+      {rootPages.map((page) => (
         <PageTreeItem
           key={page.id}
           page={page}
+          pages={pages}
           selectedPageId={selectedPageId}
           onSelectPage={onSelectPage}
           onCreatePage={onCreatePage}
           onDeletePage={onDeletePage}
           onToggleFavorite={onToggleFavorite}
           onArchive={onArchive}
+          expandedFolders={expandedFolders}
+          onToggleExpand={onToggleExpand}
           level={level}
           showActions={showActions}
         />
@@ -48,33 +57,42 @@ export function PageTree({
 
 interface PageTreeItemProps {
   page: Page;
+  pages: Page[];
   selectedPageId?: string;
   onSelectPage: (pageId: string) => void;
   onCreatePage?: (parentId?: string) => void;
   onDeletePage?: (pageId: string) => void;
   onToggleFavorite?: (pageId: string) => void;
   onArchive?: (pageId: string) => void;
+  expandedFolders: Set<string>;
+  onToggleExpand?: (folderId: string) => void;
   level: number;
   showActions: boolean;
 }
 
 function PageTreeItem({ 
   page, 
+  pages,
   selectedPageId, 
   onSelectPage, 
   onCreatePage, 
   onDeletePage,
   onToggleFavorite,
   onArchive,
+  expandedFolders,
+  onToggleExpand,
   level,
   showActions
 }: PageTreeItemProps) {
-  const [expanded, setExpanded] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const hasChildren = page.children && page.children.length > 0;
+  const childPages = pages.filter(p => p.parent_id === page.id);
+  const hasChildren = childPages.length > 0;
+  const isFolder = page.page_type === 'folder';
+  const isExpanded = expandedFolders.has(page.id);
   const isSelected = selectedPageId === page.id;
 
   const getPageIcon = () => {
+    if (isFolder) return page.icon || '📁';
     return page.icon || '📄';
   };
 
@@ -111,18 +129,18 @@ function PageTreeItem({
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={() => onSelectPage(page.id)}
       >
-        {hasChildren && (
+        {isFolder && hasChildren && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setExpanded(!expanded);
+              onToggleExpand?.(page.id);
             }}
             className="w-4 h-4 flex items-center justify-center text-text-secondary"
           >
-            {expanded ? '▼' : '▶'}
+            {isExpanded ? '▼' : '▶'}
           </button>
         )}
-        {!hasChildren && <div className="w-4" />}
+        {(!isFolder || !hasChildren) && <div className="w-4" />}
         
         <span className="text-sm">{getPageIcon()}</span>
         <span className={`text-sm truncate ${page.is_favorite ? 'font-medium' : ''}`}>
@@ -175,15 +193,17 @@ function PageTreeItem({
         )}
       </div>
       
-      {hasChildren && expanded && (
+      {isFolder && isExpanded && hasChildren && (
         <PageTree
-          pages={page.children || []}
+          pages={childPages}
           selectedPageId={selectedPageId}
           onSelectPage={onSelectPage}
           onCreatePage={onCreatePage}
           onDeletePage={onDeletePage}
           onToggleFavorite={onToggleFavorite}
           onArchive={onArchive}
+          expandedFolders={expandedFolders}
+          onToggleExpand={onToggleExpand}
           level={level + 1}
           showActions={showActions}
         />

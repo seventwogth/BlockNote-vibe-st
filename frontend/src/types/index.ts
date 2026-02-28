@@ -63,7 +63,7 @@ export interface Page {
   owner_id: string;
   title: string;
   icon?: string;
-  page_type: 'text';
+  page_type: 'text' | 'folder';
   content_text?: string;
   is_archived: boolean;
   is_favorite?: boolean;
@@ -155,7 +155,7 @@ export interface CreatePageRequest {
   parent_id?: string;
   title?: string;
   icon?: string;
-  page_type: 'text';
+  page_type: 'text' | 'folder';
 }
 
 export interface UpdatePageRequest {
